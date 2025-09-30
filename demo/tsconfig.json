@@ -1,13 +1,13 @@
 {
     "compilerOptions": {
+        "target": "ES2022",
         "useDefineForClassFields": true,
+        "module": "ESNext",
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "skipLibCheck": true,
-        "target": "es6",
-        "module": "ES2022",
 
         /* Bundler mode */
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,
         "moduleDetection": "force",
@@ -17,17 +17,9 @@
         "strict": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,
-        "erasableSyntaxOnly": false,
+        "erasableSyntaxOnly": true,
         "noFallthroughCasesInSwitch": true,
-        "noUncheckedSideEffectImports": true,
-        "declaration": true,
-        "declarationDir": "dist",
-
-        "rootDir": "src",
-        "outDir": "dist",
-        "preserveSymlinks": true,
-        "esModuleInterop": true
+        "noUncheckedSideEffectImports": true
     },
-    "include": ["src"],
-    "exclude": ["demo", "src/__tests__", "src/__mocks__"]
+    "include": ["src"]
 }

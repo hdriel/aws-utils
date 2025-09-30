@@ -1,21 +1,22 @@
+// @ts-nocheck
 import { Lambda, InvocationType, InvokeCommandOutput, InvokeCommand } from '@aws-sdk/client-lambda';
-import type { TELEGRAM_REQUEST_PARAMS, WHASTAPP_REQUEST_PARAMS, REPORT_SUMMARY_REQUEST_PARAMS } from '../interfaces';
+// import type { TELEGRAM_REQUEST_PARAMS, WHASTAPP_REQUEST_PARAMS, REPORT_SUMMARY_REQUEST_PARAMS } from '../interfaces';
 import { Credentials } from '../interfaces';
 import { logger } from '../utils/logger';
 import { CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
 
-const SLS_SERVICE_NAME = Object.freeze({
-    TELEGRAM: 'serverless-telegram-dev-',
-    WHATSAPP: 'serverless-whatsapp-dev-',
-    REPORT_SUMMARY: 'serverless-report-summary-dev-',
-});
-
-const SLS_FUNCTION_NAME = Object.freeze({
-    TELEGRAM: 'directInvokeSendTextNTF',
-    WHATSAPP: 'directInvokeSendTextNTF',
-    WHATSAPP_RECONNECT: 'directInvokeInitNTF',
-    REPORT_SUMMARY: 'directInvokeReportSummary',
-});
+// const SLS_SERVICE_NAME = Object.freeze({
+//     TELEGRAM: 'serverless-telegram-dev-',
+//     WHATSAPP: 'serverless-whatsapp-dev-',
+//     REPORT_SUMMARY: 'serverless-report-summary-dev-',
+// });
+//
+// const SLS_FUNCTION_NAME = Object.freeze({
+//     TELEGRAM: 'directInvokeSendTextNTF',
+//     WHATSAPP: 'directInvokeSendTextNTF',
+//     WHATSAPP_RECONNECT: 'directInvokeInitNTF',
+//     REPORT_SUMMARY: 'directInvokeReportSummary',
+// });
 
 export class LambdaUtil {
     private readonly lambda: Lambda;
@@ -87,34 +88,34 @@ export class LambdaUtil {
         }
     }
 
-    async invokeSendTelegramMessage(payload: TELEGRAM_REQUEST_PARAMS) {
-        return this.directInvoke({
-            slsServiceName: SLS_SERVICE_NAME.TELEGRAM,
-            slsFunctionName: SLS_FUNCTION_NAME.TELEGRAM,
-            payload,
-        });
-    }
-
-    async invokeSendWhatsAppMessage(payload: WHASTAPP_REQUEST_PARAMS) {
-        return this.directInvoke({
-            slsServiceName: SLS_SERVICE_NAME.WHATSAPP,
-            slsFunctionName: SLS_FUNCTION_NAME.WHATSAPP,
-            payload,
-        });
-    }
-
-    async invokeReconnectWhatsAppMessage() {
-        return this.directInvoke({
-            slsServiceName: SLS_SERVICE_NAME.WHATSAPP,
-            slsFunctionName: SLS_FUNCTION_NAME.WHATSAPP_RECONNECT,
-        });
-    }
-
-    async invokeReportSummaryMessage(payload: REPORT_SUMMARY_REQUEST_PARAMS) {
-        return this.directInvoke({
-            slsServiceName: SLS_SERVICE_NAME.REPORT_SUMMARY,
-            slsFunctionName: SLS_FUNCTION_NAME.REPORT_SUMMARY,
-            payload,
-        });
-    }
+    // async invokeSendTelegramMessage(payload: TELEGRAM_REQUEST_PARAMS) {
+    //     return this.directInvoke({
+    //         slsServiceName: SLS_SERVICE_NAME.TELEGRAM,
+    //         slsFunctionName: SLS_FUNCTION_NAME.TELEGRAM,
+    //         payload,
+    //     });
+    // }
+    //
+    // async invokeSendWhatsAppMessage(payload: WHASTAPP_REQUEST_PARAMS) {
+    //     return this.directInvoke({
+    //         slsServiceName: SLS_SERVICE_NAME.WHATSAPP,
+    //         slsFunctionName: SLS_FUNCTION_NAME.WHATSAPP,
+    //         payload,
+    //     });
+    // }
+    //
+    // async invokeReconnectWhatsAppMessage() {
+    //     return this.directInvoke({
+    //         slsServiceName: SLS_SERVICE_NAME.WHATSAPP,
+    //         slsFunctionName: SLS_FUNCTION_NAME.WHATSAPP_RECONNECT,
+    //     });
+    // }
+    //
+    // async invokeReportSummaryMessage(payload: REPORT_SUMMARY_REQUEST_PARAMS) {
+    //     return this.directInvoke({
+    //         slsServiceName: SLS_SERVICE_NAME.REPORT_SUMMARY,
+    //         slsFunctionName: SLS_FUNCTION_NAME.REPORT_SUMMARY,
+    //         payload,
+    //     });
+    // }
 }

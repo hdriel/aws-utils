@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import type { Response } from 'express';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import http from 'http';
 import https from 'https';
@@ -6,24 +6,24 @@ import { Upload } from '@aws-sdk/lib-storage';
 import {
     CreateBucketCommand,
     GetObjectCommand,
-    GetObjectCommandOutput,
+    type GetObjectCommandOutput,
     S3,
     S3Client,
-    CreateBucketCommandInput,
+    type CreateBucketCommandInput,
     HeadBucketCommand,
     PutPublicAccessBlockCommand,
     PutBucketPolicyCommand,
-    CreateBucketCommandOutput,
+    type CreateBucketCommandOutput,
 } from '@aws-sdk/client-s3';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { Buffer } from 'buffer';
 import archiver from 'archiver';
 import { Readable } from 'stream';
 import { logger } from '../utils/logger';
-import { ACL, ACLs, CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
+import { type ACL, ACLs, CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
 
-import {
+import type {
     BucketCreated,
     BucketDirectory,
     BucketListItem,

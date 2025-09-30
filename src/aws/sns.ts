@@ -1,5 +1,5 @@
 import { SNS } from '@aws-sdk/client-sns';
-import { Credentials } from '../interfaces';
+import type { Credentials } from '../interfaces';
 import { CREDENTIALS, ENDPOINT, REGION, TOPIC_ARN } from '../utils/consts';
 
 export class SNSUtil {

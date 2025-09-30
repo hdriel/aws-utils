@@ -7,3 +7,4 @@ export * from './s3Multer';
 export * from './s3Stream';
 export * from './ses';
 export * from './sns';
+export * from './configuration';

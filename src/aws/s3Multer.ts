@@ -2,10 +2,10 @@ import multer from 'multer';
 import multerS3 from 'multer-s3';
 import path from 'pathe';
 
-import { Credentials, File, FILES3_METADATA } from '../interfaces';
+import type { Credentials, File, FILES3_METADATA } from '../interfaces';
 import { S3BucketUtil } from './s3';
 // import { ACL, ACLs, CREDENTIALS, ENDPOINT, REGION, FILE_TYPE } from '../utils/consts';
-import { ACL, ACLs, CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
+import { type ACL, ACLs, CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
 import { logger } from '../utils/logger';
 
 export class S3BucketMulterUtil extends S3BucketUtil {

@@ -1,5 +1,5 @@
 import { SES } from '@aws-sdk/client-ses';
-import { Credentials } from '../interfaces';
+import type { Credentials } from '../interfaces';
 import { CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
 
 export class SESUtil {

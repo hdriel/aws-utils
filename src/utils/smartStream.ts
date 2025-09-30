@@ -1,5 +1,5 @@
-import { Readable, ReadableOptions } from 'stream';
-import { GetObjectCommandInput, S3 } from '@aws-sdk/client-s3';
+import { Readable, type ReadableOptions } from 'stream';
+import { type GetObjectCommandInput, S3 } from '@aws-sdk/client-s3';
 
 export class SmartStream extends Readable {
     _currentCursorPosition = 0; // Holds the current starting position for our range queries
