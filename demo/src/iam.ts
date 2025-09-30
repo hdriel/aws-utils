@@ -1,8 +1,8 @@
 import './config';
-import { IAMUtil, AWSConfigSharingUtil } from 'aws-api-utils';
+import { IAMUtil } from 'aws-api-utils';
 
 (async () => {
-    console.table(AWSConfigSharingUtil.getConfig());
+    // @ts-ignore
     const iam = new IAMUtil();
 
     const result = await iam.getUserList();

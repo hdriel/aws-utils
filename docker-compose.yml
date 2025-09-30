@@ -17,7 +17,7 @@ services:
       - PERSISTENCE=${PERSISTENCE:-1}
       - LAMBDA_EXECUTOR=${LAMBDA_EXECUTOR:-}
       - LOCALSTACK_API_KEY=${LOCALSTACK_API_KEY:-}  # only required for Pro
-      - SERVICES=s3,lambda,sns,sqs
+      - SERVICES=s3,lambda,sns,sqs,iam
       - DATA_DIR=/tmp/localstack/data
       - START_WEB=1
       - DOCKER_HOST=unix:///var/run/docker.sock

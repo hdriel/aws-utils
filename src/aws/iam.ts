@@ -5,7 +5,7 @@ export class IAMUtil {
     private readonly iam: IAMClient;
 
     constructor({
-        accessKeyId = AWSConfigSharingUtil.secretAccessKey,
+        accessKeyId = AWSConfigSharingUtil.accessKeyId,
         secretAccessKey = AWSConfigSharingUtil.secretAccessKey,
         endpoint = AWSConfigSharingUtil.endpoint,
         region = AWSConfigSharingUtil.region,
@@ -17,8 +17,9 @@ export class IAMUtil {
         region?: string;
         debug?: boolean;
     } = {}) {
+        const credentials = { accessKeyId, secretAccessKey };
         const options = {
-            ...(accessKeyId && secretAccessKey && { accessKeyId, secretAccessKey }),
+            ...(accessKeyId && secretAccessKey && { credentials }),
             ...(endpoint && { endpoint }),
             ...(region && { region }),
         };
