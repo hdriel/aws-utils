@@ -35,7 +35,6 @@ export interface ContentFile {
 export interface FileUploadResponse {
     ETag: string;
     Location: string;
-    key: string;
     Key: string;
     Bucket: string;
 }
