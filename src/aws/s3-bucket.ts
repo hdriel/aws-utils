@@ -18,6 +18,8 @@ import {
     PutPublicAccessBlockCommand,
     PutBucketPolicyCommand,
     type CreateBucketCommandOutput,
+    ListBucketsCommand,
+    type ListBucketsCommandInput,
 } from '@aws-sdk/client-s3';
 
 import { logger } from '../utils/logger';
@@ -82,14 +84,17 @@ export class S3BucketUtil {
         this.s3Client = new S3Client(s3ClientParams);
     }
 
-    getBucketLink(): string {
+    getBucketLink(bucketName?: string): string {
         return this.endpoint === 'http://localhost:4566'
-            ? `${this.endpoint}/${this.bucket}/`
-            : `https://s3.${this.region}.amazonaws.com/${this.bucket}/`;
+            ? `${this.endpoint}/${bucketName ?? this.bucket}/`
+            : `https://s3.${this.region}.amazonaws.com/${bucketName ?? this.bucket}/`;
     }
 
-    async getBucketList(): Promise<BucketListItem[]> {
-        return (await this.s3.listBuckets()) as unknown as BucketListItem[];
+    async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<BucketListItem[]> {
+        const command = new ListBucketsCommand(options);
+        // @ts-ignore
+        const response = await this.s3.send(command);
+        return (response.Buckets ?? []) as unknown as BucketListItem[];
     }
 
     async createPublicBucket(bucketName: string) {
@@ -134,8 +139,6 @@ export class S3BucketUtil {
 
         // @ts-ignore
         await this.s3.send(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
-
-        logger.info('AWS-S3', `Public bucket "${bucketName}" created successfully.`);
 
         return data;
     }

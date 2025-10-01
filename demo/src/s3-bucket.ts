@@ -5,7 +5,15 @@ import { S3BucketUtil } from 'aws-api-utils';
     const s3BucketUtil = new S3BucketUtil({ bucket: 'demo-bucket' });
 
     {
-        await s3BucketUtil.createPublicBucket('test-bucket');
+        const bucketsListBefore = await s3BucketUtil.getBucketList();
+        console.log('buckets list', bucketsListBefore);
+
+        const bucketName = 'test-bucket';
+        console.log('create public bucket', bucketName);
+        await s3BucketUtil.createPublicBucket(bucketName);
+
+        const bucketsListAfter = await s3BucketUtil.getBucketList();
+        console.log('buckets list after creating', bucketsListAfter);
     }
     // {
     //     const result = await iam.client.send(new ListUsersCommand());

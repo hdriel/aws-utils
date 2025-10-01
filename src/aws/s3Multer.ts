@@ -2,29 +2,32 @@ import multer from 'multer';
 import multerS3 from 'multer-s3';
 import path from 'pathe';
 
-import type { Credentials, File, FILES3_METADATA } from '../interfaces';
-import { S3BucketUtil } from './s3';
+import type { File, FILES3_METADATA } from '../interfaces';
+import { S3BucketUtil } from './s3-bucket';
 // import { ACL, ACLs, CREDENTIALS, ENDPOINT, REGION, FILE_TYPE } from '../utils/consts';
-import { type ACL, ACLs, CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
+import { type ACL, ACLs, ENDPOINT, REGION } from '../utils/consts';
 import { logger } from '../utils/logger';
 
 export class S3BucketMulterUtil extends S3BucketUtil {
     constructor({
         bucket,
-        credentials = CREDENTIALS,
+        accessKeyId,
+        secretAccessKey,
         endpoint = ENDPOINT,
         region = REGION,
         s3ForcePathStyle = true,
     }: {
         bucket: string;
-        credentials?: Credentials;
+        accessKeyId?: string;
+        secretAccessKey?: string;
         endpoint?: string;
         region?: string;
         s3ForcePathStyle?: boolean;
     }) {
         super({
             bucket,
-            credentials,
+            accessKeyId,
+            secretAccessKey,
             endpoint,
             region,
             s3ForcePathStyle,

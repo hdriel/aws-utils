@@ -13,7 +13,7 @@ export const logger = new Logger({
     lineTraceLevels: process.env.LOGGING_STACK_TRACE_LEVELS?.split(',') as LoggerLevelType[],
     stackTraceLines: { error: 3, warn: 3, info: 1 },
     tags: ['reqId?', 'url?'],
-    runLocally: ['true', '1'].includes(process.env.RUN_LOCALLY as string),
+    runLocally: true,
     ...(includeCloudWatchOptions && {
         transportCloudWatchOptions: {
             awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
