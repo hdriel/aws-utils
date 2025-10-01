@@ -20,6 +20,12 @@ import {
     type CreateBucketCommandOutput,
     ListBucketsCommand,
     type ListBucketsCommandInput,
+    PutObjectCommand,
+    HeadObjectCommand,
+    ListObjectsCommand,
+    PutObjectTaggingCommand,
+    GetObjectTaggingCommand,
+    DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 
 import { logger } from '../utils/logger';
@@ -109,8 +115,10 @@ export class S3BucketUtil {
                 throw err;
             }
         }
+
         // @ts-ignore
         const data: CreateBucketCommandOutput = await this.s3.send(new CreateBucketCommand({ Bucket: bucketName }));
+
         // @ts-ignore
         await this.s3.send(
             new PutPublicAccessBlockCommand({
@@ -139,6 +147,8 @@ export class S3BucketUtil {
 
         // @ts-ignore
         await this.s3.send(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
+
+        logger.info('AWS-S3', `Public bucket "${bucketName}" created successfully.`);
 
         return data;
     }
@@ -189,27 +199,34 @@ export class S3BucketUtil {
         return result;
     }
 
-    async createBucketDirectory(directory: string): Promise<BucketDirectory> {
-        return (await this.s3.putObject({ Bucket: this.bucket, Key: directory })) as BucketDirectory;
+    async createBucketDirectory(directoryPath: string): Promise<BucketDirectory> {
+        const command = new PutObjectCommand({ Bucket: this.bucket, Key: directoryPath });
+        // @ts-ignore
+        return (await this.s3.send(command)) as BucketDirectory;
     }
 
-    async getFileInfo(directory: string, filename: string): Promise<any> {
-        return (await this.s3.headObject({
+    async getFileInfo(filePath: string): Promise<any> {
+        const command = new HeadObjectCommand({
             Bucket: this.bucket,
-            Key: `${directory ? `${directory}/` : ''}${filename}`,
-        })) as any;
+            Key: filePath,
+        });
+        // @ts-ignore
+        return (await this.s3.send(command)) as any;
     }
 
     async getBucketDirectoryFiles(
-        directory: string,
+        directoryPath: string = '',
         fileNamePrefix: string = ''
     ): Promise<Array<ContentFile & { key: string }>> {
-        const prefix = `${directory ? `${directory}/` : ''}${fileNamePrefix ?? ''}`;
-        const result = await this.s3.listObjects({
+        const prefix = `${directoryPath ? `${directoryPath}/` : ''}${fileNamePrefix}`;
+        const command = new ListObjectsCommand({
             Bucket: this.bucket,
             Prefix: prefix,
             Delimiter: '/',
         });
+
+        // @ts-ignore
+        const result = await this.s3.send(command);
 
         return result.Contents?.map((content: any) => ({
             ...content,
@@ -218,18 +235,13 @@ export class S3BucketUtil {
         })) as Array<ContentFile & { key: string }>;
     }
 
-    async getObjectStreamByChecking(
-        directory: string,
-        filename: string | undefined,
-        { Range }: { Range?: string } = {}
-    ): Promise<Readable | null> {
-        const key = `${directory ? `${directory}/` : ''}${filename}`;
-        const isExists = await this.fileExists(key);
+    async getObjectStreamByChecking(filePath: string, { Range }: { Range?: string } = {}): Promise<Readable | null> {
+        const isExists = await this.fileExists(filePath);
         if (!isExists) return null;
 
         const command = new GetObjectCommand({
             Bucket: this.bucket,
-            Key: key,
+            Key: filePath,
             ...(Range ? { Range } : {}),
         });
 
@@ -243,16 +255,10 @@ export class S3BucketUtil {
         return response.Body as Readable;
     }
 
-    async getObjectStream(
-        directory: string,
-        filename: string | undefined,
-        { Range }: { Range: string | undefined } = { Range: undefined }
-    ): Promise<Readable> {
-        const key = `${directory ? `${directory}/` : ''}${filename}`;
-
+    async getObjectStream(filePath: string, { Range }: { Range?: string } = {}): Promise<Readable> {
         const command = new GetObjectCommand({
             Bucket: this.bucket,
-            Key: key,
+            Key: filePath,
             ...(Range ? { Range } : {}),
         });
 
@@ -266,35 +272,37 @@ export class S3BucketUtil {
         return response.Body as Readable;
     }
 
-    async taggingFile(directory: string, filename: string, tagVersion: string = '1.0.0'): Promise<boolean> {
-        return !!(await this.s3
-            .putObjectTagging({
-                Bucket: this.bucket,
-                Key: `${directory ? `${directory}/` : ''}${filename}`,
-                Tagging: { TagSet: [{ Key: 'version', Value: tagVersion }] },
-            })
-            .catch(() => false));
-    }
-
-    async getFileVersion(directory: string, filename: string): Promise<string> {
-        const key = `${directory ? `${directory}/` : ''}${filename}`;
-
-        const result = await this.s3.getObjectTagging({
+    async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {
+        const command = new PutObjectTaggingCommand({
             Bucket: this.bucket,
-            Key: key,
+            Key: filePath,
+            Tagging: { TagSet: [{ Key: 'version', Value: tagVersion }] },
         });
 
-        const tag = result.TagSet?.find((tag) => tag.Key === 'version');
+        // @ts-ignore
+        return !!(await this.s3.send(command).catch(() => false));
+    }
+
+    async getFileVersion(filePath: string): Promise<string> {
+        const command = new GetObjectTaggingCommand({
+            Bucket: this.bucket,
+            Key: filePath,
+        });
+
+        // @ts-ignore
+        const result = await this.s3.send(command);
+
+        const tag = result.TagSet?.find((tag: any) => tag.Key === 'version');
 
         return tag?.Value ?? '';
     }
 
-    async getFileUrl(directory: string, filename: string): Promise<string> {
+    async getFileUrl(filePath: string): Promise<string> {
         const url = await getSignedUrl(
             this.s3Client,
             new GetObjectCommand({
                 Bucket: this.bucket,
-                Key: `${directory ? `${directory}/` : ''}${filename}`,
+                Key: filePath,
             })
         );
 
@@ -303,46 +311,46 @@ export class S3BucketUtil {
         return url;
     }
 
-    async fileContentLength(key: string): Promise<number> {
+    async fileContentLength(filePath: string): Promise<number> {
         try {
-            const headObject = await this.s3.headObject({ Bucket: this.bucket, Key: key });
+            const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
+            // @ts-ignore
+            const headObject = await this.s3.send(command);
 
             return headObject.ContentLength || 0;
-        } catch (error) {
-            // @ts-ignore
+        } catch (error: any) {
             if (error.name === 'NotFound') {
-                logger.warn(null, 'key not found', { key });
-                return 0; // The file does not exist
+                logger.warn(null, 'key not found', { key: filePath });
+                return 0;
             }
-            throw error; // Handle other errors as needed
+            throw error;
         }
     }
 
-    async fileExists(key: string): Promise<boolean> {
+    async fileExists(filePath: string): Promise<boolean> {
         try {
-            await this.s3.headObject({ Bucket: this.bucket, Key: key });
-
-            return true; // The file exists
-        } catch (error) {
+            const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
             // @ts-ignore
+            await this.s3.send(command);
+
+            return true;
+        } catch (error: any) {
             if (error.name === 'NotFound') {
-                logger.warn(null, 'key not found', { key });
-                return false; // The file does not exist
+                logger.warn(null, 'key not found', { key: filePath });
+                return false;
             }
-            throw error; // Handle other errors as needed
+            throw error;
         }
     }
 
-    async getFileContent(
-        directory: string,
-        filename: string,
-        format?: string
-    ): Promise<Buffer | Uint8Array | Blob | string | undefined> {
-        const key = `${directory ? `${directory}/` : ''}${filename}`;
-        const result = await this.s3.getObject({
+    async getFileContent(filePath: string, format?: string): Promise<Buffer | Uint8Array | Blob | string | undefined> {
+        const command = new GetObjectCommand({
             Bucket: this.bucket,
-            Key: key,
+            Key: filePath,
         });
+
+        // @ts-ignore
+        const result = await this.s3.send(command);
 
         if (!result.Body) throw new Error('File Not Exists');
 
@@ -364,49 +372,48 @@ export class S3BucketUtil {
     }
 
     async uploadFile(
-        directory: string,
-        filename: string,
+        filePath: string,
         fileData: any | ArrayBuffer | string,
         acl: ACL = ACLs.private,
         version: string = '1.0.0'
     ): Promise<FileUploadResponse> {
-        const key = `${directory ? `${directory}/` : ''}${filename}`;
-
         const result = await new Upload({
             client: this.s3,
             params: {
                 Bucket: this.bucket,
                 ACL: acl,
-                Key: key,
+                Key: filePath,
                 Body: fileData,
                 Tagging: `version=${version}`,
             },
         }).done();
 
         return {
-            key,
-            Location: `https://${this.bucket}.s3.amazonaws.com/${key}`,
+            key: filePath,
+            Location: `https://${this.bucket}.s3.amazonaws.com/${filePath}`,
             ETag: result.ETag as string,
         } as FileUploadResponse;
     }
 
-    async deleteFile(directory: string, filename: string) {
-        return this.s3.deleteObject({
+    async deleteFile(filePath: string) {
+        const command = new DeleteObjectCommand({
             Bucket: this.bucket,
-            Key: `${directory ? `${directory}/` : ''}${filename}`,
+            Key: filePath,
         });
+        // @ts-ignore
+        return this.s3.send(command);
     }
 
-    async sizeOf(directory: string, filename: string) {
-        return this.s3
-            .headObject({
-                Bucket: this.bucket,
-                Key: `${directory ? `${directory}/` : ''}${filename}`,
-            })
-            .then((res) => res.ContentLength);
+    async sizeOf(filePath: string) {
+        const command = new HeadObjectCommand({
+            Bucket: this.bucket,
+            Key: filePath,
+        });
+        // @ts-ignore
+        return this.s3.send(command).then((res) => res.ContentLength);
     }
 
-    async zipKeysToStream(filenames: { status: 'fulfilled' | 'rejected'; value: string }[], res: Response) {
+    async zipKeysToStream(filePaths: { status: 'fulfilled' | 'rejected'; value: string }[], res: Response) {
         const archive = archiver('zip');
 
         // @ts-ignore
@@ -415,13 +422,12 @@ export class S3BucketUtil {
         res.setHeader('Content-Disposition', 'attachment; filename="files.zip"');
         archive.pipe(res as NodeJS.WritableStream);
 
-        for (const filename of filenames.filter((v) => v.status === 'fulfilled')) {
-            const splited = filename.value.split('/');
-            const key = splited.pop() as string;
-            const directory = splited.join('/');
+        for (const filePathObj of filePaths.filter((v) => v.status === 'fulfilled')) {
+            const filePath = filePathObj.value;
+            const fileName = filePath.split('/').pop() as string;
 
-            const file = await this.getObjectStream(directory, key);
-            archive.append(file, { name: key });
+            const file = await this.getObjectStream(filePath);
+            archive.append(file, { name: fileName });
         }
 
         return archive.finalize();
