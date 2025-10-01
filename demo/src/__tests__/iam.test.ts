@@ -1,4 +1,4 @@
-import './config';
+import '../config.ts';
 import { IAMUtil } from 'aws-api-utils';
 
 describe('IAM Functions', () => {

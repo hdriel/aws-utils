@@ -1,8 +1,12 @@
 import type { Response } from 'express';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import http from 'http';
 import https from 'https';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
+import { Buffer } from 'buffer';
+import archiver from 'archiver';
+import { Readable } from 'node:stream';
 import {
     CreateBucketCommand,
     GetObjectCommand,
@@ -15,66 +19,58 @@ import {
     PutBucketPolicyCommand,
     type CreateBucketCommandOutput,
 } from '@aws-sdk/client-s3';
-import { NodeHttpHandler } from '@smithy/node-http-handler';
-import { Buffer } from 'buffer';
-import archiver from 'archiver';
-import { Readable } from 'stream';
+
 import { logger } from '../utils/logger';
-import { type ACL, ACLs, CREDENTIALS, ENDPOINT, REGION } from '../utils/consts';
+import { type ACL, ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
 
-import type {
-    BucketCreated,
-    BucketDirectory,
-    BucketListItem,
-    ContentFile,
-    Credentials,
-    FileUploadResponse,
-} from '../interfaces';
+import type { BucketCreated, BucketDirectory, BucketListItem, ContentFile, FileUploadResponse } from '../interfaces';
+import { AWSConfigSharingUtil } from './configuration.ts';
 
 export class S3BucketUtil {
     public readonly s3: S3;
 
     public readonly s3Client: S3Client;
 
-    public readonly credentials: Credentials;
-
-    public readonly region: string;
-
     public readonly bucket: string;
 
     public readonly endpoint: string;
 
+    public readonly region: string;
+
     constructor({
         bucket,
-        credentials = CREDENTIALS,
-        endpoint = ENDPOINT,
-        region = REGION,
+        accessKeyId = AWSConfigSharingUtil.accessKeyId,
+        secretAccessKey = AWSConfigSharingUtil.secretAccessKey,
+        endpoint = AWSConfigSharingUtil.endpoint,
+        region = AWSConfigSharingUtil.region,
         s3ForcePathStyle = true,
     }: {
         bucket: string;
-        credentials?: Credentials;
+        accessKeyId?: string;
+        secretAccessKey?: string;
         endpoint?: string;
         region?: string;
         s3ForcePathStyle?: boolean;
     }) {
-        this.credentials = credentials;
-        this.bucket = bucket;
-        this.region = region;
-        this.endpoint = endpoint;
-
-        const params = {
-            ...(credentials && { credentials }),
+        const credentials = { accessKeyId, secretAccessKey };
+        const options = {
+            ...(accessKeyId && secretAccessKey && { credentials }),
             ...(endpoint && { endpoint }),
             ...(region && { region }),
+        };
+        this.endpoint = endpoint;
+        this.region = region;
+        this.bucket = bucket;
+
+        const params = {
+            ...options,
             ...(s3ForcePathStyle && { forcePathStyle: s3ForcePathStyle }),
         };
         this.s3 = new S3(params);
 
         const s3ClientParams = {
-            ...(credentials && { credentials }),
-            ...(endpoint && { endpoint }),
-            ...(region && { region }),
+            ...options,
             ...(s3ForcePathStyle && { forcePathStyle: s3ForcePathStyle }),
             requestHandler: new NodeHttpHandler({
                 httpAgent: new http.Agent({ keepAlive: true, maxSockets: 300 }),
@@ -98,6 +94,7 @@ export class S3BucketUtil {
 
     async createPublicBucket(bucketName: string) {
         try {
+            // @ts-ignore
             await this.s3.send(new HeadBucketCommand({ Bucket: bucketName }));
             logger.info(null, `Bucket already exists.`, { bucketName });
             return;
@@ -107,8 +104,9 @@ export class S3BucketUtil {
                 throw err;
             }
         }
-
+        // @ts-ignore
         const data: CreateBucketCommandOutput = await this.s3.send(new CreateBucketCommand({ Bucket: bucketName }));
+        // @ts-ignore
         await this.s3.send(
             new PutPublicAccessBlockCommand({
                 Bucket: bucketName,
@@ -134,6 +132,7 @@ export class S3BucketUtil {
             ],
         };
 
+        // @ts-ignore
         await this.s3.send(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
 
         logger.info('AWS-S3', `Public bucket "${bucketName}" created successfully.`);
@@ -148,9 +147,10 @@ export class S3BucketUtil {
         const bucket = this.bucket;
 
         const exists = await this.s3Client
+            // @ts-ignore
             .send(new HeadBucketCommand({ Bucket: bucket }))
             .then(() => true)
-            .catch((err) => {
+            .catch((err: any) => {
                 if (err?.$metadata?.httpStatusCode === 404) return false;
                 logger.error(null, 'failed to check bucket existence', { error: err });
                 throw err;
@@ -179,6 +179,7 @@ export class S3BucketUtil {
 
         logger.info(null, 'creating private bucket', createParams);
 
+        // @ts-ignore
         const result = await this.s3Client.send(new CreateBucketCommand(createParams));
         logger.info(null, 'Private bucket created', result);
 
@@ -229,6 +230,7 @@ export class S3BucketUtil {
             ...(Range ? { Range } : {}),
         });
 
+        // @ts-ignore
         const response = await this.s3.send(command);
 
         if (!response.Body || !(response.Body instanceof Readable)) {
@@ -251,6 +253,7 @@ export class S3BucketUtil {
             ...(Range ? { Range } : {}),
         });
 
+        // @ts-ignore
         const response = await this.s3.send(command);
 
         if (!response.Body || !(response.Body instanceof Readable)) {
@@ -403,7 +406,9 @@ export class S3BucketUtil {
     async zipKeysToStream(filenames: { status: 'fulfilled' | 'rejected'; value: string }[], res: Response) {
         const archive = archiver('zip');
 
+        // @ts-ignore
         res.setHeader('Content-Type', 'application/zip');
+        // @ts-ignore
         res.setHeader('Content-Disposition', 'attachment; filename="files.zip"');
         archive.pipe(res as NodeJS.WritableStream);
 
@@ -440,6 +445,7 @@ export class S3BucketUtil {
     } | null> {
         try {
             const cmd = new GetObjectCommand({ Bucket: this.bucket, Key, ...(Range ? { Range } : {}) });
+            // @ts-ignore
             const res: GetObjectCommandOutput = await s3Limiter(() => this.s3Client.send(cmd, { abortSignal }));
 
             const body = res.Body as Readable | undefined;
