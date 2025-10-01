@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "dev:iam": "tsx src/iam.ts",
+        "dev:s3-bucket": "tsx src/s3-bucket.ts",
         "test": "jest",
         "test:watch": "jest --watch",
         "yalc:publish": "cd .. && npm run yalc:publish",
