@@ -43,8 +43,11 @@ export class S3BucketUtil {
 
     public readonly region: string;
 
+    public readonly reqId: string | null;
+
     constructor({
         bucket,
+        reqId,
         accessKeyId = AWSConfigSharingUtil.accessKeyId,
         secretAccessKey = AWSConfigSharingUtil.secretAccessKey,
         endpoint = AWSConfigSharingUtil.endpoint,
@@ -52,6 +55,7 @@ export class S3BucketUtil {
         s3ForcePathStyle = true,
     }: {
         bucket: string;
+        reqId?: string;
         accessKeyId?: string;
         secretAccessKey?: string;
         endpoint?: string;
@@ -67,6 +71,7 @@ export class S3BucketUtil {
         this.endpoint = endpoint;
         this.region = region;
         this.bucket = bucket;
+        this.reqId = reqId ?? null;
 
         const s3ClientParams = {
             ...options,
@@ -81,12 +86,13 @@ export class S3BucketUtil {
         this.s3Client = new S3Client(s3ClientParams);
     }
 
-    getBucketLink(bucketName?: string): string {
+    get link(): string {
         return this.endpoint === 'http://localhost:4566'
-            ? `${this.endpoint}/${bucketName ?? this.bucket}/`
-            : `https://s3.${this.region}.amazonaws.com/${bucketName ?? this.bucket}/`;
+            ? `${this.endpoint}/${this.bucket}/`
+            : `https://s3.${this.region}.amazonaws.com/${this.bucket}/`;
     }
 
+    // todo: move to s3Utils
     async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<BucketListItem[]> {
         const command = new ListBucketsCommand(options);
         // @ts-ignore
@@ -94,17 +100,30 @@ export class S3BucketUtil {
         return (response.Buckets ?? []) as unknown as BucketListItem[];
     }
 
-    async createPublicBucket(bucketName: string): Promise<CreateBucketCommandOutput | undefined> {
+    async isExistsBucket(): Promise<boolean> {
+        const bucketName = this.bucket;
+
         try {
             // @ts-ignore
             await this.s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
-            logger.info(null, `Bucket already exists.`, { bucketName });
-            return;
+            return true;
         } catch (err: any) {
             if (err.name !== 'NotFound' && err.$metadata?.httpStatusCode !== 404) {
-                logger.error(null, 'Error checking bucket:', err);
+                logger.error(this.reqId, 'Error checking bucket:', err);
                 throw err;
+            } else {
+                return false;
             }
+        }
+    }
+
+    private async initAsPublicBucket(): Promise<CreateBucketCommandOutput | undefined> {
+        const bucketName = this.bucket;
+
+        const isExists = await this.isExistsBucket();
+        if (isExists) {
+            logger.info(this.reqId, `Bucket already exists.`, { bucketName });
+            return;
         }
 
         // @ts-ignore
@@ -138,56 +157,54 @@ export class S3BucketUtil {
 
         // @ts-ignore
         await this.s3Client.send(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
+        logger.info(this.reqId, `Public bucket created successfully.`, { bucketName });
 
-        logger.info('AWS-S3', `Public bucket "${bucketName}" created successfully.`);
+        return data;
+    }
+
+    private async initAsPrivateBucket(
+        includeConstraintLocation?: boolean
+    ): Promise<CreateBucketCommandOutput | undefined> {
+        const bucketName = this.bucket;
+
+        const isExists = await this.isExistsBucket();
+        if (isExists) {
+            logger.info(this.reqId, `Bucket already exists.`, { bucketName });
+            return;
+        }
+
+        const createParams: CreateBucketCommandInput = {
+            Bucket: bucketName,
+            ...(includeConstraintLocation && {
+                CreateBucketConfiguration: { LocationConstraint: this.region as any },
+            }),
+        };
+
+        // @ts-ignore
+        const data = await this.s3Client.send(new CreateBucketCommand(createParams));
+        logger.info(this.reqId, `Private bucket created successfully.`, { bucketName });
 
         return data;
     }
 
     async initBucket(
         acl: ACLs = ACLs.private,
-        setConstraintLocation = false
+        includeConstraintLocation = false
     ): Promise<BucketCreated | CreateBucketCommandOutput | undefined> {
-        const bucket = this.bucket;
+        const bucketName = this.bucket;
 
-        const exists = await this.s3Client
-            // @ts-ignore
-            .send(new HeadBucketCommand({ Bucket: bucket }))
-            .then(() => true)
-            .catch((err: any) => {
-                if (err?.$metadata?.httpStatusCode === 404) return false;
-                logger.error(null, 'failed to check bucket existence', { error: err });
-                throw err;
-            });
-
-        if (exists) {
-            logger.info(null, `Bucket "${bucket}" already exists`);
-            return {
-                Location: `${this.endpoint}/${bucket}/`,
-                isExistsBucket: true,
-            };
+        const isExists = await this.isExistsBucket();
+        if (isExists) {
+            logger.info(this.reqId, `Bucket already exists.`, { bucketName });
+            return;
         }
 
-        if (acl !== ACLs.private) {
-            logger.info(null, 'creating public bucket', { bucket });
-            return await this.createPublicBucket(bucket);
-        }
+        const data =
+            acl === ACLs.private
+                ? await this.initAsPrivateBucket(includeConstraintLocation)
+                : await this.initAsPublicBucket();
 
-        const createParams: CreateBucketCommandInput = { Bucket: bucket };
-
-        if (setConstraintLocation) {
-            createParams.CreateBucketConfiguration = {
-                LocationConstraint: this.region as any,
-            };
-        }
-
-        logger.info(null, 'creating private bucket', createParams);
-
-        // @ts-ignore
-        const result = await this.s3Client.send(new CreateBucketCommand(createParams));
-        logger.info(null, 'Private bucket created', result);
-
-        return result;
+        return data;
     }
 
     async createBucketDirectory(directoryPath: string): Promise<BucketDirectory> {
@@ -302,7 +319,7 @@ export class S3BucketUtil {
             return headObject.ContentLength ?? 0;
         } catch (error: any) {
             if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-                logger.warn(null, 'File not found', { filePath });
+                logger.warn(this.reqId, 'File not found', { filePath });
                 return 0;
             }
             throw error;
@@ -411,7 +428,7 @@ export class S3BucketUtil {
                 const stream = await this.getObjectStream(filePath);
                 archive.append(stream, { name: fileName });
             } catch (error) {
-                logger.warn(null, 'Failed to add file to zip', { filePath, error });
+                logger.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
             }
         }
 
@@ -462,7 +479,7 @@ export class S3BucketUtil {
                 },
             };
         } catch (error) {
-            logger.warn(null, 'getS3VideoStream error', { Bucket: this.bucket, filePath, Range, error });
+            logger.warn(this.reqId, 'getS3VideoStream error', { Bucket: this.bucket, filePath, Range, error });
             return null;
         }
     }
