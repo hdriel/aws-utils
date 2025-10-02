@@ -29,15 +29,24 @@ import {
     GetObjectTaggingCommand,
     DeleteObjectCommand,
     type ServiceOutputTypes,
-    type ListBucketsCommandOutput,
     type Bucket,
+    type ListBucketsCommandOutput,
+    type HeadBucketCommandOutput,
+    type PutObjectCommandOutput,
+    type HeadObjectCommandOutput,
+    type ListObjectsCommandOutput,
+    type PutObjectTaggingCommandOutput,
+    type GetObjectTaggingCommandOutput,
+    type DeleteObjectCommandOutput,
+    type PutPublicAccessBlockCommandOutput,
+    type PutBucketPolicyCommandOutput,
 } from '@aws-sdk/client-s3';
 
 import { logger } from '../utils/logger';
 import { type ACL, ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
 
-import type { BucketCreated, BucketDirectory, BucketListItem, ContentFile, FileUploadResponse } from '../interfaces';
+import type { BucketCreated, BucketDirectory, ContentFile, FileUploadResponse } from '../interfaces';
 import { AWSConfigSharingUtil } from './configuration.ts';
 
 const pump = promisify(pipeline);
@@ -117,7 +126,7 @@ export class S3BucketUtil {
         const bucketName = this.bucket;
 
         try {
-            await this.execute(new HeadBucketCommand({ Bucket: bucketName }));
+            await this.execute<HeadBucketCommandOutput>(new HeadBucketCommand({ Bucket: bucketName }));
             return true;
         } catch (err: any) {
             if (err.name !== 'NotFound' && err.$metadata?.httpStatusCode !== 404) {
@@ -139,9 +148,8 @@ export class S3BucketUtil {
         }
 
         const data = await this.execute(new CreateBucketCommand({ Bucket: bucketName }));
-
-        await this.execute(
-            new PutPublicAccessBlockCommand({
+        CREATE_PUBLICK_ACCESS_BLOCK: {
+            const command = new PutPublicAccessBlockCommand({
                 Bucket: bucketName,
                 PublicAccessBlockConfiguration: {
                     BlockPublicAcls: false,
@@ -149,23 +157,28 @@ export class S3BucketUtil {
                     BlockPublicPolicy: false,
                     RestrictPublicBuckets: false,
                 },
-            })
-        );
+            });
+            await this.execute<PutPublicAccessBlockCommandOutput>(command);
+        }
 
-        const policy = {
-            Version: '2012-10-17',
-            Statement: [
-                {
-                    Sid: 'PublicReadGetObject',
-                    Effect: 'Allow',
-                    Principal: '*',
-                    Action: 's3:GetObject',
-                    Resource: `arn:aws:s3:::${bucketName}/*`,
-                },
-            ],
-        };
+        UPDATE_PUBLICK_ACCESS_POLICY: {
+            const policy = {
+                Version: '2012-10-17',
+                Statement: [
+                    {
+                        Sid: 'PublicReadGetObject',
+                        Effect: 'Allow',
+                        Principal: '*',
+                        Action: 's3:GetObject',
+                        Resource: `arn:aws:s3:::${bucketName}/*`,
+                    },
+                ],
+            };
 
-        await this.execute(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
+            const command = new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) });
+            await this.execute<PutBucketPolicyCommandOutput>(command);
+        }
+
         logger.info(this.reqId, `Public bucket created successfully.`, { bucketName });
 
         return data;
@@ -218,16 +231,16 @@ export class S3BucketUtil {
     async createBucketDirectory(directoryPath: string): Promise<BucketDirectory> {
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: directoryPath });
 
-        return (await this.execute(command)) as BucketDirectory;
+        return (await this.execute<PutObjectCommandOutput>(command)) as BucketDirectory;
     }
 
-    async getFileInfo(filePath: string): Promise<any> {
+    async getFileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
         const command = new HeadObjectCommand({
             Bucket: this.bucket,
             Key: filePath,
         });
 
-        return await this.execute(command);
+        return await this.execute<HeadObjectCommandOutput>(command);
     }
 
     async getDirectoryFilesListInfo(
@@ -242,7 +255,7 @@ export class S3BucketUtil {
             Delimiter: '/',
         });
 
-        const result = await this.execute(command);
+        const result = await this.execute<ListObjectsCommandOutput>(command);
 
         return (result.Contents?.map((content: any) => ({
             ...content,
@@ -273,7 +286,7 @@ export class S3BucketUtil {
             ...(Range ? { Range } : {}),
         });
 
-        const response = await this.execute(command);
+        const response = await this.execute<GetObjectCommandOutput>(command);
 
         if (!response.Body || !(response.Body instanceof Readable)) {
             throw new Error('Invalid response body: not a Readable stream');
@@ -290,7 +303,7 @@ export class S3BucketUtil {
                 Tagging: { TagSet: [{ Key: 'version', Value: tagVersion }] },
             });
 
-            await this.execute(command);
+            await this.execute<PutObjectTaggingCommandOutput>(command);
 
             return true;
         } catch {
@@ -304,9 +317,9 @@ export class S3BucketUtil {
             Key: filePath,
         });
 
-        const result = await this.execute(command);
+        const result = await this.execute<GetObjectTaggingCommandOutput>(command);
 
-        const tag = result.TagSet?.find((tag: any) => tag.Key === 'version');
+        const tag = result.TagSet?.find((tag) => tag.Key === 'version');
 
         return tag?.Value ?? '';
     }
@@ -325,7 +338,7 @@ export class S3BucketUtil {
     async sizeOf(filePath: string, unit: 'bytes' | 'KB' | 'MB' | 'GB' = 'bytes'): Promise<number> {
         try {
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
-            const headObject = await this.execute(command);
+            const headObject = await this.execute<HeadObjectCommandOutput>(command);
             const bytes = headObject.ContentLength ?? 0;
 
             switch (unit) {
@@ -350,7 +363,7 @@ export class S3BucketUtil {
     async fileExists(filePath: string): Promise<boolean> {
         try {
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
-            await this.execute(command);
+            await this.execute<HeadObjectCommandOutput>(command);
 
             return true;
         } catch (error: any) {
@@ -364,7 +377,7 @@ export class S3BucketUtil {
 
     async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: filePath });
-        const result = await this.execute(command);
+        const result = await this.execute<GetObjectCommandOutput>(command);
 
         if (!result.Body) {
             throw new Error('File body is empty');
@@ -414,9 +427,9 @@ export class S3BucketUtil {
         };
     }
 
-    async deleteFile(filePath: string): Promise<void> {
+    async deleteFile(filePath: string): Promise<DeleteObjectCommandOutput> {
         const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: filePath });
-        return await this.execute(command);
+        return await this.execute<DeleteObjectCommandOutput>(command);
     }
 
     async streamZipFile(filePath: string | string[], res: Response & any): Promise<void> {
