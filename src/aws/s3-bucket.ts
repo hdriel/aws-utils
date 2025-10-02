@@ -1,6 +1,9 @@
-import type { Response } from 'express';
+import type { Response, Request, NextFunction } from 'express';
+import ms, { type StringValue } from 'ms';
 import http from 'http';
 import https from 'https';
+import { pipeline } from 'stream';
+import { promisify } from 'util';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
@@ -25,6 +28,9 @@ import {
     PutObjectTaggingCommand,
     GetObjectTaggingCommand,
     DeleteObjectCommand,
+    type ServiceOutputTypes,
+    type ListBucketsCommandOutput,
+    type Bucket,
 } from '@aws-sdk/client-s3';
 
 import { logger } from '../utils/logger';
@@ -33,6 +39,8 @@ import { s3Limiter } from '../utils/concurrency';
 
 import type { BucketCreated, BucketDirectory, BucketListItem, ContentFile, FileUploadResponse } from '../interfaces';
 import { AWSConfigSharingUtil } from './configuration.ts';
+
+const pump = promisify(pipeline);
 
 export class S3BucketUtil {
     public readonly s3Client: S3Client;
@@ -92,20 +100,24 @@ export class S3BucketUtil {
             : `https://s3.${this.region}.amazonaws.com/${this.bucket}/`;
     }
 
-    // todo: move to s3Utils
-    async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<BucketListItem[]> {
-        const command = new ListBucketsCommand(options);
+    private async execute<T = ServiceOutputTypes>(command: any, options?: any): Promise<T> {
         // @ts-ignore
-        const response = await this.s3Client.send(command);
-        return (response.Buckets ?? []) as unknown as BucketListItem[];
+        return this.s3Client.send(command, options);
+    }
+
+    // todo: move to s3Utils
+    async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<Bucket[]> {
+        const command = new ListBucketsCommand(options);
+        const response = await this.execute<ListBucketsCommandOutput>(command);
+
+        return response?.Buckets || [];
     }
 
     async isExistsBucket(): Promise<boolean> {
         const bucketName = this.bucket;
 
         try {
-            // @ts-ignore
-            await this.s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
+            await this.execute(new HeadBucketCommand({ Bucket: bucketName }));
             return true;
         } catch (err: any) {
             if (err.name !== 'NotFound' && err.$metadata?.httpStatusCode !== 404) {
@@ -126,11 +138,9 @@ export class S3BucketUtil {
             return;
         }
 
-        // @ts-ignore
-        const data = await this.s3Client.send(new CreateBucketCommand({ Bucket: bucketName }));
+        const data = await this.execute(new CreateBucketCommand({ Bucket: bucketName }));
 
-        // @ts-ignore
-        await this.s3Client.send(
+        await this.execute(
             new PutPublicAccessBlockCommand({
                 Bucket: bucketName,
                 PublicAccessBlockConfiguration: {
@@ -155,8 +165,7 @@ export class S3BucketUtil {
             ],
         };
 
-        // @ts-ignore
-        await this.s3Client.send(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
+        await this.execute(new PutBucketPolicyCommand({ Bucket: bucketName, Policy: JSON.stringify(policy) }));
         logger.info(this.reqId, `Public bucket created successfully.`, { bucketName });
 
         return data;
@@ -180,8 +189,7 @@ export class S3BucketUtil {
             }),
         };
 
-        // @ts-ignore
-        const data = await this.s3Client.send(new CreateBucketCommand(createParams));
+        const data = await this.execute(new CreateBucketCommand(createParams));
         logger.info(this.reqId, `Private bucket created successfully.`, { bucketName });
 
         return data;
@@ -209,8 +217,8 @@ export class S3BucketUtil {
 
     async createBucketDirectory(directoryPath: string): Promise<BucketDirectory> {
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: directoryPath });
-        // @ts-ignore
-        return (await this.s3Client.send(command)) as BucketDirectory;
+
+        return (await this.execute(command)) as BucketDirectory;
     }
 
     async getFileInfo(filePath: string): Promise<any> {
@@ -218,23 +226,23 @@ export class S3BucketUtil {
             Bucket: this.bucket,
             Key: filePath,
         });
-        // @ts-ignore
-        return await this.s3Client.send(command);
+
+        return await this.execute(command);
     }
 
-    async getBucketDirectoryFiles(
-        directoryPath: string = '',
-        fileNamePrefix: string = ''
+    async getDirectoryFilesListInfo(
+        directoryPath?: string,
+        fileNamePrefix?: string
     ): Promise<Array<ContentFile & { key: string }>> {
-        const prefix = directoryPath ? `${directoryPath}/${fileNamePrefix}` : fileNamePrefix;
+        const prefix = [directoryPath, fileNamePrefix].filter((v) => v).join('/');
+
         const command = new ListObjectsCommand({
             Bucket: this.bucket,
             Prefix: prefix,
             Delimiter: '/',
         });
 
-        // @ts-ignore
-        const result = await this.s3Client.send(command);
+        const result = await this.execute(command);
 
         return (result.Contents?.map((content: any) => ({
             ...content,
@@ -250,15 +258,22 @@ export class S3BucketUtil {
         return this.getObjectStream(filePath, { Range });
     }
 
-    async getObjectStream(filePath: string, { Range }: { Range?: string } = {}): Promise<Readable> {
+    async getObjectStream(
+        filePath: string,
+        { Range, checkExists }: { Range?: string; checkExists?: boolean } = {}
+    ): Promise<Readable | null> {
+        if (checkExists) {
+            const isExists = await this.fileExists(filePath);
+            if (!isExists) return null;
+        }
+
         const command = new GetObjectCommand({
             Bucket: this.bucket,
             Key: filePath,
             ...(Range ? { Range } : {}),
         });
 
-        // @ts-ignore
-        const response = await this.s3Client.send(command);
+        const response = await this.execute(command);
 
         if (!response.Body || !(response.Body instanceof Readable)) {
             throw new Error('Invalid response body: not a Readable stream');
@@ -275,8 +290,8 @@ export class S3BucketUtil {
                 Tagging: { TagSet: [{ Key: 'version', Value: tagVersion }] },
             });
 
-            // @ts-ignore
-            await this.s3Client.send(command);
+            await this.execute(command);
+
             return true;
         } catch {
             return false;
@@ -289,34 +304,40 @@ export class S3BucketUtil {
             Key: filePath,
         });
 
-        // @ts-ignore
-        const result = await this.s3Client.send(command);
+        const result = await this.execute(command);
 
         const tag = result.TagSet?.find((tag: any) => tag.Key === 'version');
 
         return tag?.Value ?? '';
     }
 
-    async getFileUrl(filePath: string, expiresIn: number = 3600): Promise<string> {
-        const command = new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
+    async generateSignedFileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
+        const expiresInSeconds = typeof expiresIn === 'number' ? expiresIn : ms(expiresIn) / 1000;
+
+        const command = new GetObjectCommand({ Bucket: this.bucket, Key: filePath });
+        const url = await getSignedUrl(this.s3Client, command, {
+            expiresIn: expiresInSeconds, // is using 3600 it's will expire in 1 hour (default is 900 seconds = 15 minutes)
         });
-
-        const url = await getSignedUrl(this.s3Client, command, { expiresIn });
-
-        if (!url) throw new Error('Failed to generate signed URL');
 
         return url;
     }
 
-    async fileContentLength(filePath: string): Promise<number> {
+    async sizeOf(filePath: string, unit: 'bytes' | 'KB' | 'MB' | 'GB' = 'bytes'): Promise<number> {
         try {
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
-            // @ts-ignore
-            const headObject = await this.s3Client.send(command);
+            const headObject = await this.execute(command);
+            const bytes = headObject.ContentLength ?? 0;
 
-            return headObject.ContentLength ?? 0;
+            switch (unit) {
+                case 'KB':
+                    return bytes / 1024;
+                case 'MB':
+                    return bytes / (1024 * 1024);
+                case 'GB':
+                    return bytes / (1024 * 1024 * 1024);
+                default:
+                    return bytes;
+            }
         } catch (error: any) {
             if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
                 logger.warn(this.reqId, 'File not found', { filePath });
@@ -329,27 +350,25 @@ export class S3BucketUtil {
     async fileExists(filePath: string): Promise<boolean> {
         try {
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
-            // @ts-ignore
-            await this.s3Client.send(command);
+            await this.execute(command);
+
             return true;
         } catch (error: any) {
             if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
                 return false;
             }
+
             throw error;
         }
     }
 
-    async getFileContent(filePath: string, format?: 'base64' | 'utf8'): Promise<Buffer | string> {
-        const command = new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-        });
+    async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
+        const command = new GetObjectCommand({ Bucket: this.bucket, Key: filePath });
+        const result = await this.execute(command);
 
-        // @ts-ignore
-        const result = await this.s3Client.send(command);
-
-        if (!result.Body) throw new Error('File body is empty');
+        if (!result.Body) {
+            throw new Error('File body is empty');
+        }
 
         const stream = result.Body as Readable;
         const chunks: Uint8Array[] = [];
@@ -372,7 +391,7 @@ export class S3BucketUtil {
         fileData: Buffer | Readable | string | Uint8Array,
         acl: ACL = ACLs.private,
         version: string = '1.0.0'
-    ): Promise<FileUploadResponse> {
+    ): Promise<FileUploadResponse & { test: string }> {
         const upload = new Upload({
             client: this.s3Client,
             params: {
@@ -390,35 +409,21 @@ export class S3BucketUtil {
             Bucket: this.bucket,
             Key: filePath,
             Location: `https://${this.bucket}.s3.amazonaws.com/${filePath}`,
+            test: `${this.link}/${filePath}`,
             ETag: result.ETag as string,
         };
     }
 
     async deleteFile(filePath: string): Promise<void> {
-        const command = new DeleteObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-        });
-        // @ts-ignore
-        await this.s3Client.send(command);
+        const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: filePath });
+        return await this.execute(command);
     }
 
-    async sizeOf(filePath: string): Promise<number | undefined> {
-        const command = new HeadObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-        });
-        // @ts-ignore
-        const response = await this.s3Client.send(command);
-        return response.ContentLength;
-    }
-
-    async zipKeysToStream(filePaths: string[], res: Response): Promise<void> {
+    async streamZipFile(filePath: string | string[], res: Response & any): Promise<void> {
+        const filePaths = ([] as string[]).concat(filePath as string[]);
         const archive = archiver('zip');
 
-        // @ts-ignore
         res.setHeader('Content-Type', 'application/zip');
-        // @ts-ignore
         res.setHeader('Content-Disposition', 'attachment; filename="files.zip"');
         archive.pipe(res as NodeJS.WritableStream);
 
@@ -426,6 +431,10 @@ export class S3BucketUtil {
             try {
                 const fileName = filePath.split('/').pop() || filePath;
                 const stream = await this.getObjectStream(filePath);
+                if (!stream) {
+                    throw Error('File not found');
+                }
+
                 archive.append(stream, { name: fileName });
             } catch (error) {
                 logger.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
@@ -435,7 +444,7 @@ export class S3BucketUtil {
         await archive.finalize();
     }
 
-    async getS3VideoStream({
+    async streamVideoFile({
         filePath,
         Range,
         abortSignal,
@@ -461,26 +470,141 @@ export class S3BucketUtil {
                 ...(Range ? { Range } : {}),
             });
 
-            // @ts-ignore
-            const res: GetObjectCommandOutput = await s3Limiter(() => this.s3Client.send(cmd, { abortSignal }));
+            const data: GetObjectCommandOutput = await s3Limiter(() => this.execute(cmd, { abortSignal }));
 
-            const body = res.Body as Readable | undefined;
+            const body = data.Body as Readable | undefined;
             if (!body) return null;
 
             return {
                 body,
                 meta: {
-                    contentType: res.ContentType,
-                    contentLength: res.ContentLength,
-                    contentRange: res.ContentRange,
-                    acceptRanges: res.AcceptRanges,
-                    etag: res.ETag,
-                    lastModified: res.LastModified,
+                    contentType: data.ContentType,
+                    contentLength: data.ContentLength,
+                    contentRange: data.ContentRange,
+                    acceptRanges: data.AcceptRanges,
+                    etag: data.ETag,
+                    lastModified: data.LastModified,
                 },
             };
         } catch (error) {
             logger.warn(this.reqId, 'getS3VideoStream error', { Bucket: this.bucket, filePath, Range, error });
             return null;
         }
+    }
+
+    async getStreamVideoFileCtrl({
+        contentType = 'video/mp4',
+        fileKey,
+        Range,
+        allowedWhitelist,
+        streamTimeoutMS = 30_000,
+    }: {
+        contentType?: string;
+        fileKey: string;
+        allowedWhitelist?: string[];
+        Range?: string | undefined;
+        streamTimeoutMS: number | undefined;
+    }) {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            const filePath = fileKey;
+            const isExists = await this.fileExists(filePath);
+            const fileSize = await this.sizeOf(filePath);
+            if (!isExists) {
+                next(Error(`File does not exist: "${filePath}"`));
+                return;
+            }
+
+            if (req.method === 'HEAD') {
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Accept-Ranges', 'bytes');
+                if (fileSize) res.setHeader('Content-Length', String(fileSize));
+                return res.status(200).end();
+            }
+
+            // הכנת AbortController לביטול בקשת S3 אם הלקוח נסגר
+            const abort = new AbortController();
+            const onClose = () => abort.abort();
+            req.once('close', onClose);
+
+            try {
+                const result = await this.streamVideoFile({ filePath, Range, abortSignal: abort.signal });
+                const { body, meta } = result as any;
+
+                const origin = Array.isArray(allowedWhitelist)
+                    ? allowedWhitelist.includes(req.headers.origin ?? '')
+                        ? req.headers.origin!
+                        : undefined
+                    : allowedWhitelist;
+                if (origin) {
+                    res.setHeader('Access-Control-Allow-Origin', origin);
+                    res.setHeader('Vary', 'Origin');
+                }
+
+                const finalContentType = contentType.startsWith('video/') ? contentType : `video/${contentType}`;
+                res.setHeader('Content-Type', meta.contentType ?? finalContentType);
+                res.setHeader('Accept-Ranges', meta.acceptRanges ?? 'bytes');
+
+                if (Range && meta.contentRange) {
+                    res.status(206);
+                    res.setHeader('Content-Range', meta.contentRange);
+                    if (typeof meta.contentLength === 'number') {
+                        res.setHeader('Content-Length', String(meta.contentLength));
+                    }
+                } else if (fileSize) {
+                    res.setHeader('Content-Length', String(fileSize));
+                }
+
+                if (meta.etag) res.setHeader('ETag', meta.etag);
+                if (meta.lastModified) res.setHeader('Last-Modified', meta.lastModified.toUTCString());
+
+                // Headers
+                // if (Range) res.status(206); // Partial content
+
+                const timeout = setTimeout(() => {
+                    abort.abort();
+                    if (!res.headersSent) res.status(504);
+                    res.end();
+                }, streamTimeoutMS);
+
+                res.once('close', () => {
+                    clearTimeout(timeout);
+                    body.destroy?.();
+                    req.off('close', onClose);
+                });
+
+                await pump(body, res);
+
+                clearTimeout(timeout);
+            } catch (error: any) {
+                const isBenignStreamError =
+                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+                    error?.name === 'AbortError' ||
+                    error?.code === 'ECONNRESET';
+
+                if (isBenignStreamError) {
+                    return;
+                }
+
+                if (!res.headersSent) {
+                    logger.warn(req.id, 'caught exception in stream controller', {
+                        error: error?.message ?? String(error),
+                        key: fileKey,
+                        url: req.originalUrl,
+                        userId: req.user?._id,
+                    });
+
+                    next(error);
+                    return;
+                }
+
+                if (!res.writableEnded) {
+                    try {
+                        res.end();
+                    } catch {}
+                }
+
+                return;
+            }
+        };
     }
 }
