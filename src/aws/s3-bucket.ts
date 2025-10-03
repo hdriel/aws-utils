@@ -16,6 +16,9 @@ import {
     type GetObjectCommandOutput,
     S3Client,
     type CreateBucketCommandInput,
+    type DeleteBucketCommandInput,
+    type DeleteBucketCommandOutput,
+    DeleteBucketCommand,
     HeadBucketCommand,
     PutPublicAccessBlockCommand,
     PutBucketPolicyCommand,
@@ -224,6 +227,22 @@ export class S3BucketUtil {
             acl === ACLs.private
                 ? await this.initAsPrivateBucket(includeConstraintLocation)
                 : await this.initAsPublicBucket();
+
+        return data;
+    }
+
+    async destroyBucket(): Promise<DeleteBucketCommandOutput | undefined> {
+        // todo add emptyBucketFromAllFiles first
+        const bucketName = this.bucket;
+
+        const isExists = await this.isExistsBucket();
+        if (!isExists) {
+            logger.debug(this.reqId, `Bucket not exists.`, { bucketName });
+            return;
+        }
+
+        const createParams: DeleteBucketCommandInput = { Bucket: bucketName };
+        const data = await this.execute(new DeleteBucketCommand(createParams));
 
         return data;
     }
