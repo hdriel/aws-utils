@@ -43,7 +43,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import { logger } from '../utils/logger';
-import { type ACL, ACLs } from '../utils/consts';
+import { ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
 
 import type { BucketCreated, BucketDirectory, ContentFile, FileUploadResponse } from '../interfaces';
@@ -402,7 +402,7 @@ export class S3BucketUtil {
     async uploadFile(
         filePath: string,
         fileData: Buffer | Readable | string | Uint8Array,
-        acl: ACL = ACLs.private,
+        acl: ACLs = ACLs.private,
         version: string = '1.0.0'
     ): Promise<FileUploadResponse & { test: string }> {
         const upload = new Upload({

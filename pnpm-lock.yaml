@@ -44,6 +44,9 @@ importers:
       aws-lambda:
         specifier: ^1.0.7
         version: 1.0.7
+      bytes:
+        specifier: ^3.1.2
+        version: 3.1.2
       express:
         specifier: ^5.1.0
         version: 5.1.0
@@ -81,6 +84,9 @@ importers:
       '@types/aws-lambda':
         specifier: ^8.10.153
         version: 8.10.153
+      '@types/bytes':
+        specifier: ^3.1.5
+        version: 3.1.5
       '@types/express':
         specifier: ^5.0.3
         version: 5.0.3
@@ -956,6 +962,9 @@ packages:
 
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
+
+  '@types/bytes@3.1.5':
+    resolution: {integrity: sha512-VgZkrJckypj85YxEsEavcMmmSOIzkUHqWmM4CCyia5dc54YwsXzJ5uT4fYxBQNEXx+oF1krlhgCbvfubXqZYsQ==}
 
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
@@ -4154,6 +4163,8 @@ snapshots:
     dependencies:
       '@types/connect': 3.4.38
       '@types/node': 24.6.0
+
+  '@types/bytes@3.1.5': {}
 
   '@types/connect@3.4.38':
     dependencies:
