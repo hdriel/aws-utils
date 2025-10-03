@@ -5,8 +5,9 @@ import multerS3 from 'multer-s3';
 import bytes, { type Unit as BytesUnit } from 'bytes';
 import type { File, FILES3_METADATA } from '../interfaces';
 import { S3BucketUtil } from './s3-bucket';
-import { ACLs, ENDPOINT, REGION } from '../utils/consts';
+import { ACLs } from '../utils/consts';
 import { logger } from '../utils/logger';
+import { AWSConfigSharingUtil } from './configuration.ts';
 
 type FILE_EXT = 'xlsx' | 'pdf' | 'pptx' | 'txt' | 'docx';
 type FILE_TYPE = 'image' | 'video' | 'application' | 'text';
@@ -16,10 +17,10 @@ export class S3BucketMulterUtil extends S3BucketUtil {
     private readonly maxUploadFileSizeRestriction: ByteUnitStringValue;
     constructor({
         bucket,
-        accessKeyId,
-        secretAccessKey,
-        endpoint = ENDPOINT,
-        region = REGION,
+        accessKeyId = AWSConfigSharingUtil.accessKeyId,
+        secretAccessKey = AWSConfigSharingUtil.secretAccessKey,
+        endpoint = AWSConfigSharingUtil.endpoint,
+        region = AWSConfigSharingUtil.region,
         s3ForcePathStyle = true,
         maxUploadFileSizeRestriction = '10GB',
     }: {
