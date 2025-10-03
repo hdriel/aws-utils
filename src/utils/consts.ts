@@ -1,15 +1,7 @@
 const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT, AWS_REGION, AWS_TOPIC_ARN_EMAIL, AWS_SESSION_TOKEN } =
     {} as any;
 
-export const FILE_TYPE = {
-    IMAGES: ['image'],
-    VIDEOS: ['video'],
-    FILES: ['text', 'application'],
-};
-
 export const ENDPOINT = AWS_ENDPOINT;
-
-export type ACL = 'private' | 'public-read' | 'public-read-write';
 
 export enum ACLs {
     private = 'private',

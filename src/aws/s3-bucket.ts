@@ -46,7 +46,7 @@ import { logger } from '../utils/logger';
 import { ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
 
-import type { BucketCreated, BucketDirectory, ContentFile, FileUploadResponse } from '../interfaces';
+import type { ContentFile, FileUploadResponse } from '../interfaces';
 import { AWSConfigSharingUtil } from './configuration.ts';
 
 const pump = promisify(pipeline);
@@ -211,7 +211,7 @@ export class S3BucketUtil {
     async initBucket(
         acl: ACLs = ACLs.private,
         includeConstraintLocation = false
-    ): Promise<BucketCreated | CreateBucketCommandOutput | undefined> {
+    ): Promise<CreateBucketCommandOutput | undefined> {
         const bucketName = this.bucket;
 
         const isExists = await this.isExistsBucket();
@@ -228,10 +228,10 @@ export class S3BucketUtil {
         return data;
     }
 
-    async createBucketDirectory(directoryPath: string): Promise<BucketDirectory> {
+    async createBucketDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: directoryPath });
 
-        return (await this.execute<PutObjectCommandOutput>(command)) as BucketDirectory;
+        return await this.execute<PutObjectCommandOutput>(command);
     }
 
     async getFileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
