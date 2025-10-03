@@ -1,9 +1,8 @@
+import path from 'pathe';
 import type { Request } from 'express';
-import bytes, { type Unit as BytesUnit } from 'bytes';
 import multer, { type Multer } from 'multer';
 import multerS3 from 'multer-s3';
-import path from 'pathe';
-
+import bytes, { type Unit as BytesUnit } from 'bytes';
 import type { File, FILES3_METADATA } from '../interfaces';
 import { S3BucketUtil } from './s3-bucket';
 import { ACLs, ENDPOINT, REGION } from '../utils/consts';
