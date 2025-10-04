@@ -15,6 +15,7 @@ type ByteUnitStringValue = `${number}${BytesUnit}`;
 
 export class S3BucketMulterUtil extends S3BucketUtil {
     private readonly maxUploadFileSizeRestriction: ByteUnitStringValue;
+
     constructor({
         bucket,
         accessKeyId = AWSConfigSharingUtil.accessKeyId,
