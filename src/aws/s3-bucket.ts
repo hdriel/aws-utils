@@ -286,6 +286,67 @@ export class S3BucketUtil {
         return await this.execute<PutObjectCommandOutput>(command);
     }
 
+    async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
+        // Ensure the directory path ends with a slash
+        const normalizedPath = directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`;
+
+        let deletedCount = 0;
+        let ContinuationToken: string | undefined = undefined;
+
+        do {
+            // List all objects with the directory prefix
+            const listResp: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: normalizedPath,
+                    ContinuationToken,
+                })
+            );
+
+            // If no objects found, return null
+            if (!listResp.Contents || listResp.Contents.length === 0) {
+                if (deletedCount === 0) {
+                    logger.debug(this.reqId, `Directory not found or already empty`, { directoryPath: normalizedPath });
+                    return null;
+                }
+                break;
+            }
+
+            // Delete all objects in this batch
+            const deleteResult = await this.execute<DeleteObjectsCommandOutput>(
+                new DeleteObjectsCommand({
+                    Bucket: this.bucket,
+                    Delete: {
+                        Objects: listResp.Contents.map((obj) => ({ Key: obj.Key! })),
+                        Quiet: false, // Set to true if you don't need deletion details
+                    },
+                })
+            );
+
+            deletedCount += deleteResult.Deleted?.length ?? 0;
+
+            // Log any errors
+            if (deleteResult.Errors && deleteResult.Errors.length > 0) {
+                logger.warn(this.reqId, `Some objects failed to delete`, {
+                    directoryPath: normalizedPath,
+                    errors: deleteResult.Errors,
+                });
+            }
+
+            ContinuationToken = listResp.NextContinuationToken;
+        } while (ContinuationToken);
+
+        logger.info(this.reqId, `Directory deleted successfully`, {
+            directoryPath: normalizedPath,
+            deletedCount,
+        });
+
+        return {
+            Deleted: [{ Key: normalizedPath }],
+            $metadata: {},
+        } as DeleteObjectsCommandOutput;
+    }
+
     async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
         const command = new HeadObjectCommand({
             Bucket: this.bucket,
@@ -299,7 +360,8 @@ export class S3BucketUtil {
         directoryPath?: string,
         fileNamePrefix?: string
     ): Promise<Array<ContentFile & { key: string }>> {
-        const prefix = [directoryPath, fileNamePrefix].filter((v) => v).join('/');
+        const directoryPrefix = directoryPath?.endsWith('/') ? directoryPath : directoryPath ? `${directoryPath}/` : '';
+        const prefix = directoryPrefix + (fileNamePrefix || '');
 
         const command = new ListObjectsCommand({
             Bucket: this.bucket,
@@ -450,18 +512,6 @@ export class S3BucketUtil {
         acl: ACLs = ACLs.private,
         version: string = '1.0.0'
     ): Promise<FileUploadResponse & { test: string }> {
-        const directories = filePath.split('/');
-        directories.pop();
-
-        const nestedDirectoryList = directories.reduce((directories, directory) => {
-            directories.push(`${directories.at(-1)}/${directory}`);
-            return directories;
-        }, [] as string[]);
-
-        for (const directory of nestedDirectoryList) {
-            await this.createDirectory(directory);
-        }
-
         const upload = new Upload({
             client: this.s3Client,
             params: {

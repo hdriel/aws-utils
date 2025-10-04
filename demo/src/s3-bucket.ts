@@ -3,10 +3,12 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
 
 (async () => {
     const s3BucketUtil = new S3BucketUtil({ bucket: 'demo-bucket' });
-    const tempDirectory = 'new-directory';
-    const filePath = 'testing/test.txt';
+    const tempDirectory = 'new-directory/nested-directory';
+    const filePath = 'testing/files/test.txt';
     const fileData =
         "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.";
+
+    await s3BucketUtil.destroyBucket(true);
 
     CREATE: {
         console.log('#'.repeat(25));
@@ -59,14 +61,26 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
         console.log('#'.repeat(25));
         console.log('#### BUCKET directory and files list', '\n');
 
+        await s3BucketUtil.uploadFile('temp.txt', fileData);
         const directoryListInfo = await s3BucketUtil.directoryFilesListInfo();
         console.log('Directory List Info', directoryListInfo);
+        await s3BucketUtil.deleteFile('temp.txt');
 
-        const directoryFileListInfo = await s3BucketUtil.directoryFilesListInfo('testing');
+        const directoryFileListInfo = await s3BucketUtil.directoryFilesListInfo('testing/files');
         console.log('Directory file List Info', directoryFileListInfo);
 
-        const directoryPrefixFileListInfo = await s3BucketUtil.directoryFilesListInfo('testing', 'test');
+        const directoryPrefixFileListInfo = await s3BucketUtil.directoryFilesListInfo('testing/files', 'test');
         console.log('Directory prefix file List Info', directoryPrefixFileListInfo);
+
+        console.log('\n' + '='.repeat(25));
+    }
+
+    DELETE_DIRECTORY: {
+        console.log('#'.repeat(25));
+        console.log('#### DELETE BUCKET DIRECTORY', tempDirectory, '\n');
+
+        const deletedDirectories = await s3BucketUtil.deleteDirectory(tempDirectory);
+        console.log('Directory delete response', deletedDirectories);
 
         console.log('\n' + '='.repeat(25));
     }
@@ -155,7 +169,11 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
                 return s3BucketUtil.deleteFile(filePath);
             })
             .then((deleteFileResponse) => {
-                console.log('delete bucket again after delete file', deleteFileResponse);
+                console.log('delete bucket file response', deleteFileResponse);
+                return s3BucketUtil.deleteDirectory(tempDirectory);
+            })
+            .then((deleteDirectoryResponse) => {
+                console.log('delete bucket directory response', deleteDirectoryResponse);
                 return s3BucketUtil.destroyBucket();
             })
             .then((bucketsDeleteResult) => {
@@ -173,4 +191,6 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
     //     const result = await iam.getUserList();
     //     console.log(result);
     // }
+
+    return s3BucketUtil.destroyBucket(true);
 })();
