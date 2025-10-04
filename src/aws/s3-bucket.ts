@@ -121,7 +121,6 @@ export class S3BucketUtil {
         return this.s3Client.send(command, options);
     }
 
-    // todo: move to s3Utils
     async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<Bucket[]> {
         const command = new ListBucketsCommand(options);
         const response = await this.execute<ListBucketsCommandOutput>(command);
@@ -235,7 +234,7 @@ export class S3BucketUtil {
         return data;
     }
 
-    async emptyBucket() {
+    private async emptyBucket() {
         let ContinuationToken: string | undefined = undefined;
         do {
             const listResp: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
