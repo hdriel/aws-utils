@@ -3,6 +3,10 @@ version: '3.9'
 volumes:
   docker-data: {}
 
+networks:
+  app-network:
+    driver: bridge
+
 services:
   localstack:
     container_name: "${LOCALSTACK_DOCKER_NAME:-localstack-main}"
@@ -35,3 +39,26 @@ services:
       - "${VOLUME_DIR_LOCALSTACK:-./docker-data/aws-localstack}/aws-bootstrap:/opt/bootstrap/"
     networks:
       - app-network
+
+  minio:
+    image: minio/minio
+    #    command: server --endpoint http://localhost:4572 http://localhost:4572
+    command: server --console-address ":9001" /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+      - MINIO_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-xxxxxxxxx}
+      - MINIO_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-xxxxxxxxxxxxxxxxxxxxx}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_REGION=AWS_REGION
+    #      - MINIO_BROWSER=off
+    volumes:
+      - ./docker-data/localstack/s3:/data
+      - ./docker-data/localstack/s3/${AWS_BUCKET_NAME:-my-bucket}:/data"
+      - ./docker-data/localstack/${AWS_BUCKET_NAME:-my-bucket}:/data"
+    depends_on:
+      - localstack

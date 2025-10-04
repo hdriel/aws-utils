@@ -43,6 +43,10 @@ import {
     type DeleteObjectCommandOutput,
     type PutPublicAccessBlockCommandOutput,
     type PutBucketPolicyCommandOutput,
+    ListObjectsV2Command,
+    type ListObjectsV2CommandOutput,
+    DeleteObjectsCommand,
+    type DeleteObjectsCommandOutput,
 } from '@aws-sdk/client-s3';
 
 import { logger } from '../utils/logger';
@@ -231,8 +235,33 @@ export class S3BucketUtil {
         return data;
     }
 
-    async destroyBucket(): Promise<DeleteBucketCommandOutput | undefined> {
-        // todo add emptyBucketFromAllFiles first
+    async emptyBucket() {
+        let ContinuationToken: string | undefined = undefined;
+        do {
+            const listResp: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    ContinuationToken,
+                })
+            );
+
+            if (listResp.Contents && listResp.Contents.length > 0) {
+                await this.execute<DeleteObjectsCommandOutput>(
+                    new DeleteObjectsCommand({
+                        Bucket: this.bucket,
+                        Delete: {
+                            Objects: listResp.Contents.map((obj) => ({ Key: obj.Key! })),
+                        },
+                    })
+                );
+            }
+            ContinuationToken = listResp.NextContinuationToken;
+        } while (ContinuationToken);
+    }
+
+    async destroyBucket(
+        forceDeleteAllFilesBeforeDestroyBucket = false
+    ): Promise<DeleteBucketCommandOutput | undefined> {
         const bucketName = this.bucket;
 
         const isExists = await this.isExistsBucket();
@@ -241,19 +270,23 @@ export class S3BucketUtil {
             return;
         }
 
+        if (forceDeleteAllFilesBeforeDestroyBucket) {
+            await this.emptyBucket();
+        }
+
         const createParams: DeleteBucketCommandInput = { Bucket: bucketName };
         const data = await this.execute(new DeleteBucketCommand(createParams));
 
         return data;
     }
 
-    async createBucketDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
+    async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: directoryPath });
 
         return await this.execute<PutObjectCommandOutput>(command);
     }
 
-    async getFileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
+    async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
         const command = new HeadObjectCommand({
             Bucket: this.bucket,
             Key: filePath,
@@ -262,7 +295,7 @@ export class S3BucketUtil {
         return await this.execute<HeadObjectCommandOutput>(command);
     }
 
-    async getDirectoryFilesListInfo(
+    async directoryFilesListInfo(
         directoryPath?: string,
         fileNamePrefix?: string
     ): Promise<Array<ContentFile & { key: string }>> {
@@ -283,18 +316,11 @@ export class S3BucketUtil {
         })) ?? []) as Array<ContentFile & { key: string }>;
     }
 
-    async getObjectStreamByChecking(filePath: string, { Range }: { Range?: string } = {}): Promise<Readable | null> {
-        const isExists = await this.fileExists(filePath);
-        if (!isExists) return null;
-
-        return this.getObjectStream(filePath, { Range });
-    }
-
     async getObjectStream(
         filePath: string,
-        { Range, checkExists }: { Range?: string; checkExists?: boolean } = {}
+        { Range, checkFileExists = true }: { Range?: string; checkFileExists?: boolean } = {}
     ): Promise<Readable | null> {
-        if (checkExists) {
+        if (checkFileExists) {
             const isExists = await this.fileExists(filePath);
             if (!isExists) return null;
         }
@@ -330,7 +356,7 @@ export class S3BucketUtil {
         }
     }
 
-    async getFileVersion(filePath: string): Promise<string> {
+    async fileVersion(filePath: string): Promise<string> {
         const command = new GetObjectTaggingCommand({
             Bucket: this.bucket,
             Key: filePath,
@@ -424,6 +450,18 @@ export class S3BucketUtil {
         acl: ACLs = ACLs.private,
         version: string = '1.0.0'
     ): Promise<FileUploadResponse & { test: string }> {
+        const directories = filePath.split('/');
+        directories.pop();
+
+        const nestedDirectoryList = directories.reduce((directories, directory) => {
+            directories.push(`${directories.at(-1)}/${directory}`);
+            return directories;
+        }, [] as string[]);
+
+        for (const directory of nestedDirectoryList) {
+            await this.createDirectory(directory);
+        }
+
         const upload = new Upload({
             client: this.s3Client,
             params: {

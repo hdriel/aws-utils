@@ -21,7 +21,9 @@
         "build:watch": "tsc --watch",
         "format": "prettier --write .",
         "clean": "rimraf ./dist",
-        "yalc:publish": "pnpm run build && yalc publish --private --push && cd demo && npm run yalc:attach"
+        "yalc:publish": "pnpm run build && yalc publish --private --push && cd demo && npm run yalc:attach",
+        "docker:localstack:restart": "cross-env NODE_ENV=localhost && docker-compose -f docker-compose.localstack.yml --env-file .env.local up -d --build",
+        "docker:localstack:down": "docker-compose -f docker-compose.localstack.yml down"
     },
     "dependencies": {
         "@aws-sdk/client-iam": "3.899.0",
@@ -56,6 +58,7 @@
         "@types/ms": "2.1.0",
         "@types/multer": "2.0.0",
         "@types/multer-s3": "3.0.3",
+        "cross-env": "^10.1.0",
         "prettier": "^3.6.2",
         "ts-node": "^10.9.2",
         "tsup": "^8.5.0"
