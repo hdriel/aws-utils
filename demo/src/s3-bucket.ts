@@ -168,9 +168,10 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
                 console.log('failed to delete bucket', error.message);
                 return s3BucketUtil.deleteFile(filePath);
             })
-            .then((deleteFileResponse) => {
+            .then(async (deleteFileResponse) => {
                 console.log('delete bucket file response', deleteFileResponse);
-                return s3BucketUtil.deleteDirectory(tempDirectory);
+                await s3BucketUtil.uploadFile(`${tempDirectory}/temp000.txt`, fileData);
+                return s3BucketUtil.deleteDirectory(tempDirectory.split('/')[0]);
             })
             .then((deleteDirectoryResponse) => {
                 console.log('delete bucket directory response', deleteDirectoryResponse);
@@ -178,19 +179,12 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
             })
             .then((bucketsDeleteResult) => {
                 console.log('delete bucket', bucketsDeleteResult);
+            })
+            .catch((error) => {
+                console.error('FAILED TO DELETE BUCKET!!!', error.message);
+                return s3BucketUtil.destroyBucket(true);
             });
 
         console.log('\n' + '='.repeat(25));
     }
-    // {
-    //     const result = await iam.client.send(new ListUsersCommand());
-    //     console.log(result);
-    // }
-    //
-    // {
-    //     const result = await iam.getUserList();
-    //     console.log(result);
-    // }
-
-    return s3BucketUtil.destroyBucket(true);
 })();

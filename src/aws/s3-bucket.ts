@@ -287,14 +287,12 @@ export class S3BucketUtil {
     }
 
     async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
-        // Ensure the directory path ends with a slash
         const normalizedPath = directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`;
 
-        let deletedCount = 0;
+        let totalDeletedCount = 0;
         let ContinuationToken: string | undefined = undefined;
 
         do {
-            // List all objects with the directory prefix
             const listResp: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
                 new ListObjectsV2Command({
                     Bucket: this.bucket,
@@ -303,42 +301,58 @@ export class S3BucketUtil {
                 })
             );
 
-            // If no objects found, return null
-            if (!listResp.Contents || listResp.Contents.length === 0) {
-                if (deletedCount === 0) {
-                    logger.debug(this.reqId, `Directory not found or already empty`, { directoryPath: normalizedPath });
-                    return null;
+            if (listResp.Contents && listResp.Contents.length > 0) {
+                const deleteResult = await this.execute<DeleteObjectsCommandOutput>(
+                    new DeleteObjectsCommand({
+                        Bucket: this.bucket,
+                        Delete: {
+                            Objects: listResp.Contents.map((obj) => ({ Key: obj.Key! })),
+                            Quiet: false,
+                        },
+                    })
+                );
+
+                totalDeletedCount += deleteResult.Deleted?.length ?? 0;
+
+                if (deleteResult.Errors && deleteResult.Errors.length > 0) {
+                    logger.warn(this.reqId, `Some objects failed to delete`, {
+                        directoryPath: normalizedPath,
+                        errors: deleteResult.Errors,
+                    });
                 }
-                break;
-            }
-
-            // Delete all objects in this batch
-            const deleteResult = await this.execute<DeleteObjectsCommandOutput>(
-                new DeleteObjectsCommand({
-                    Bucket: this.bucket,
-                    Delete: {
-                        Objects: listResp.Contents.map((obj) => ({ Key: obj.Key! })),
-                        Quiet: false, // Set to true if you don't need deletion details
-                    },
-                })
-            );
-
-            deletedCount += deleteResult.Deleted?.length ?? 0;
-
-            // Log any errors
-            if (deleteResult.Errors && deleteResult.Errors.length > 0) {
-                logger.warn(this.reqId, `Some objects failed to delete`, {
-                    directoryPath: normalizedPath,
-                    errors: deleteResult.Errors,
-                });
             }
 
             ContinuationToken = listResp.NextContinuationToken;
         } while (ContinuationToken);
 
+        if (totalDeletedCount === 0) {
+            const directoryExists = await this.fileExists(normalizedPath);
+            if (!directoryExists) {
+                logger.debug(this.reqId, `Directory not found`, { directoryPath: normalizedPath });
+                return null;
+            }
+        }
+
+        try {
+            await this.execute<DeleteObjectCommandOutput>(
+                new DeleteObjectCommand({
+                    Bucket: this.bucket,
+                    Key: normalizedPath,
+                })
+            );
+            totalDeletedCount++;
+        } catch (error: any) {
+            if (error.name !== 'NotFound' && error.$metadata?.httpStatusCode !== 404) {
+                logger.warn(this.reqId, `Failed to delete directory marker`, {
+                    directoryPath: normalizedPath,
+                    error,
+                });
+            }
+        }
+
         logger.info(this.reqId, `Directory deleted successfully`, {
             directoryPath: normalizedPath,
-            deletedCount,
+            deletedCount: totalDeletedCount,
         });
 
         return {
@@ -539,29 +553,33 @@ export class S3BucketUtil {
         return await this.execute<DeleteObjectCommandOutput>(command);
     }
 
-    async streamZipFile(filePath: string | string[], res: Response & any): Promise<void> {
-        const filePaths = ([] as string[]).concat(filePath as string[]);
-        const archive = archiver('zip');
+    async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
+        return async (_req: Request & any, res: Response & any, next: NextFunction & any) => {
+            const filePaths = ([] as string[]).concat(filePath as string[]);
+            const archive = archiver('zip');
+            const filename = _filename || new Date().toISOString();
 
-        res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', 'attachment; filename="files.zip"');
-        archive.pipe(res as NodeJS.WritableStream);
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
+            archive.pipe(res as NodeJS.WritableStream);
 
-        for (const filePath of filePaths) {
-            try {
-                const fileName = filePath.split('/').pop() || filePath;
-                const stream = await this.getObjectStream(filePath);
-                if (!stream) {
-                    throw Error('File not found');
+            for (const filePath of filePaths) {
+                try {
+                    const fileName = filePath.split('/').pop() || filePath;
+                    const stream = await this.getObjectStream(filePath);
+                    if (!stream) {
+                        next(Error(`File not found for zipping archive stream: "${filePath}"`));
+                        return;
+                    }
+
+                    archive.append(stream, { name: fileName });
+                } catch (error) {
+                    logger.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
                 }
-
-                archive.append(stream, { name: fileName });
-            } catch (error) {
-                logger.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
             }
-        }
 
-        await archive.finalize();
+            await archive.finalize();
+        };
     }
 
     async streamVideoFile({
@@ -641,7 +659,6 @@ export class S3BucketUtil {
                 return res.status(200).end();
             }
 
-            // הכנת AbortController לביטול בקשת S3 אם הלקוח נסגר
             const abort = new AbortController();
             const onClose = () => abort.abort();
             req.once('close', onClose);
@@ -676,9 +693,6 @@ export class S3BucketUtil {
 
                 if (meta.etag) res.setHeader('ETag', meta.etag);
                 if (meta.lastModified) res.setHeader('Last-Modified', meta.lastModified.toUTCString());
-
-                // Headers
-                // if (Range) res.status(206); // Partial content
 
                 const timeout = setTimeout(() => {
                     abort.abort();
