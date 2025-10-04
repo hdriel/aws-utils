@@ -62,14 +62,14 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
         console.log('#### BUCKET directory and files list', '\n');
 
         await s3BucketUtil.uploadFile('temp.txt', fileData);
-        const directoryListInfo = await s3BucketUtil.directoryFilesListInfo();
-        console.log('Directory List Info', directoryListInfo);
+        const directoryTreeInfo = await s3BucketUtil.directoryTree();
+        console.log('Directory tree info', directoryTreeInfo);
         await s3BucketUtil.deleteFile('temp.txt');
 
-        const directoryFileListInfo = await s3BucketUtil.directoryFilesListInfo('testing/files');
-        console.log('Directory file List Info', directoryFileListInfo);
+        const directoryListInfo = await s3BucketUtil.directoryList('testing');
+        console.log('Directory List Info', directoryListInfo);
 
-        const directoryPrefixFileListInfo = await s3BucketUtil.directoryFilesListInfo('testing/files', 'test');
+        const directoryPrefixFileListInfo = await s3BucketUtil.fileListInfo('testing/files', 'test');
         console.log('Directory prefix file List Info', directoryPrefixFileListInfo);
 
         console.log('\n' + '='.repeat(25));

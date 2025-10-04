@@ -121,6 +121,8 @@ export class S3BucketUtil {
         return this.s3Client.send(command, options);
     }
 
+    // ##### BUCKET BLOCK ##########################
+
     async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<Bucket[]> {
         const command = new ListBucketsCommand(options);
         const response = await this.execute<ListBucketsCommandOutput>(command);
@@ -279,8 +281,11 @@ export class S3BucketUtil {
         return data;
     }
 
+    // ##### DIRECTORY BLOCK ##########################
+
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
-        const command = new PutObjectCommand({ Bucket: this.bucket, Key: directoryPath });
+        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+        const command = new PutObjectCommand({ Bucket: this.bucket, Key: normalizedPath });
 
         return await this.execute<PutObjectCommandOutput>(command);
     }
@@ -360,6 +365,169 @@ export class S3BucketUtil {
         } as DeleteObjectsCommandOutput;
     }
 
+    async directoryList(directoryPath?: string): Promise<{
+        directories: string[];
+        files: Array<ContentFile & { key: string }>;
+    }> {
+        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+
+        const command = new ListObjectsV2Command({
+            Bucket: this.bucket,
+            Prefix: normalizedPath,
+            Delimiter: '/',
+        });
+
+        const result = await this.execute<ListObjectsV2CommandOutput>(command);
+
+        // Extract directories (CommonPrefixes)
+        const directories = (result.CommonPrefixes || [])
+            .map((prefix) => prefix.Prefix!)
+            .map((prefix) => {
+                // Remove the base path and trailing slash to get just the directory name
+                const relativePath = prefix.replace(normalizedPath, '');
+                return relativePath.endsWith('/') ? relativePath.slice(0, -1) : relativePath;
+            })
+            .filter((dir) => dir); // Remove empty strings
+
+        // Extract files (Contents)
+        const files = (result.Contents || [])
+            .filter((content) => {
+                // Filter out the directory marker itself (empty file with trailing /)
+                return content.Key !== normalizedPath && !content.Key?.endsWith('/');
+            })
+            .map((content: any) => ({
+                ...content,
+                key: content.Key.replace(normalizedPath, ''),
+                LastModified: new Date(content.LastModified),
+            })) as Array<ContentFile & { key: string }>;
+
+        return { directories, files };
+    }
+
+    /**
+     * Get all files recursively (example for search/indexing)
+     * @param directoryPath
+     */
+    async directoryListRecursive(directoryPath?: string): Promise<{
+        directories: string[];
+        files: Array<ContentFile & { key: string; fullPath: string }>;
+    }> {
+        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+
+        const allDirectories: string[] = [];
+        const allFiles: Array<ContentFile & { key: string; fullPath: string }> = [];
+        let ContinuationToken: string | undefined = undefined;
+
+        do {
+            const command = new ListObjectsV2Command({
+                Bucket: this.bucket,
+                Prefix: normalizedPath,
+                ContinuationToken,
+                // No Delimiter - to get all nested items
+            });
+
+            const result: any = await this.execute<ListObjectsV2CommandOutput>(command);
+
+            if (result.Contents) {
+                for (const content of result.Contents) {
+                    const fullPath = content.Key!;
+                    const relativePath = fullPath.replace(normalizedPath, '');
+
+                    // If it ends with /, it's a directory marker
+                    if (fullPath.endsWith('/')) {
+                        allDirectories.push(relativePath.slice(0, -1)); // Remove trailing /
+                    } else {
+                        // It's a file
+                        allFiles.push({
+                            ...content,
+                            key: relativePath,
+                            fullPath: fullPath,
+                            LastModified: new Date(content.LastModified),
+                        } as ContentFile & { key: string; fullPath: string });
+                    }
+                }
+            }
+
+            ContinuationToken = result.NextContinuationToken;
+        } while (ContinuationToken);
+
+        return {
+            directories: allDirectories,
+            files: allFiles,
+        };
+    }
+
+    /**
+     * Get tree files recursively (example for build file explorer UI)
+     * @param directoryPath - the directory start from
+     * @example
+     * const tree = await s3Util.getDirectoryTree('uploads');
+     * // {
+     * //   name: 'uploads',
+     * //   path: 'uploads/',
+     * //   type: 'directory',
+     * //   children: [
+     * //     {
+     * //       name: 'logo.png',
+     * //       path: 'uploads/logo.png',
+     * //       type: 'file',
+     * //       size: 12345,
+     * //       lastModified: Date
+     * //     },
+     * //     {
+     * //       name: 'images',
+     * //       path: 'uploads/images/',
+     * //       type: 'directory',
+     * //       children: [
+     * //         { name: 'photo1.jpg', type: 'file', ... },
+     * //         { name: 'photo2.jpg', type: 'file', ... }
+     * //       ]
+     * //     }
+     * //   ]
+     * // }
+     */
+    async directoryTree(directoryPath?: string): Promise<{
+        name: string;
+        path: string;
+        type: 'directory' | 'file';
+        size?: number;
+        lastModified?: Date;
+        children?: Array<any>;
+    }> {
+        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+
+        const { directories, files } = await this.directoryList(directoryPath);
+
+        const tree: any = {
+            name: directoryPath || 'root',
+            path: normalizedPath,
+            type: 'directory',
+            children: [],
+        };
+
+        // Add files
+        for (const file of files) {
+            tree.children.push({
+                name: file.key,
+                path: normalizedPath + file.key,
+                type: 'file',
+                size: file.Size,
+                lastModified: file.LastModified,
+            });
+        }
+
+        // Add directories (recursively)
+        for (const dir of directories) {
+            const subPath = normalizedPath + dir;
+            const subTree = await this.directoryTree(subPath);
+            tree.children.push(subTree);
+        }
+
+        return tree;
+    }
+
+    // ##### FILES BLOCK ##########################
+
     async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
         const command = new HeadObjectCommand({
             Bucket: this.bucket,
@@ -369,10 +537,7 @@ export class S3BucketUtil {
         return await this.execute<HeadObjectCommandOutput>(command);
     }
 
-    async directoryFilesListInfo(
-        directoryPath?: string,
-        fileNamePrefix?: string
-    ): Promise<Array<ContentFile & { key: string }>> {
+    async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<Array<ContentFile & { key: string }>> {
         const directoryPrefix = directoryPath?.endsWith('/') ? directoryPath : directoryPath ? `${directoryPath}/` : '';
         const prefix = directoryPrefix + (fileNamePrefix || '');
 
@@ -389,30 +554,6 @@ export class S3BucketUtil {
             key: content.Key.replace(prefix, ''),
             LastModified: new Date(content.LastModified),
         })) ?? []) as Array<ContentFile & { key: string }>;
-    }
-
-    async getObjectStream(
-        filePath: string,
-        { Range, checkFileExists = true }: { Range?: string; checkFileExists?: boolean } = {}
-    ): Promise<Readable | null> {
-        if (checkFileExists) {
-            const isExists = await this.fileExists(filePath);
-            if (!isExists) return null;
-        }
-
-        const command = new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-            ...(Range ? { Range } : {}),
-        });
-
-        const response = await this.execute<GetObjectCommandOutput>(command);
-
-        if (!response.Body || !(response.Body instanceof Readable)) {
-            throw new Error('Invalid response body: not a Readable stream');
-        }
-
-        return response.Body as Readable;
     }
 
     async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {
@@ -550,6 +691,32 @@ export class S3BucketUtil {
     async deleteFile(filePath: string): Promise<DeleteObjectCommandOutput> {
         const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: filePath });
         return await this.execute<DeleteObjectCommandOutput>(command);
+    }
+
+    // ##### STREAMING BLOCK ##########################
+
+    async getObjectStream(
+        filePath: string,
+        { Range, checkFileExists = true }: { Range?: string; checkFileExists?: boolean } = {}
+    ): Promise<Readable | null> {
+        if (checkFileExists) {
+            const isExists = await this.fileExists(filePath);
+            if (!isExists) return null;
+        }
+
+        const command = new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: filePath,
+            ...(Range ? { Range } : {}),
+        });
+
+        const response = await this.execute<GetObjectCommandOutput>(command);
+
+        if (!response.Body || !(response.Body instanceof Readable)) {
+            throw new Error('Invalid response body: not a Readable stream');
+        }
+
+        return response.Body as Readable;
     }
 
     async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
