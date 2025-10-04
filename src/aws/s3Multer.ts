@@ -44,7 +44,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
         this.maxUploadFileSizeRestriction = maxUploadFileSizeRestriction;
     }
 
-    static fileFilter(types?: FILE_TYPE[], fileExt?: FILE_EXT[]) {
+    private static fileFilter(types?: FILE_TYPE[], fileExt?: FILE_EXT[]) {
         const fileTypesChecker = fileExt?.length ? new RegExp(fileExt.join('|'), 'i') : undefined;
 
         return function (_req: Request, file: File, cb: Function) {
