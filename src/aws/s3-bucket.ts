@@ -123,11 +123,11 @@ export class S3BucketUtil {
 
     // ##### BUCKET BLOCK ##########################
 
-    async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<Bucket[]> {
+    async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<Bucket[] | null> {
         const command = new ListBucketsCommand(options);
         const response = await this.execute<ListBucketsCommandOutput>(command);
 
-        return response?.Buckets || [];
+        return response?.Buckets || null;
     }
 
     async isExistsBucket(): Promise<boolean> {

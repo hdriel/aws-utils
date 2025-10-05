@@ -36,41 +36,41 @@ const defaultOptionValue = awsRegions.find((v) => v.default)?.value as string;
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const [credentials, setCredentials] = useState<AWSCredentials>({
-        accessKeyId: '',
-        secretAccessKey: '',
-        region: defaultOptionValue,
+        accessKeyId: import.meta.env.VITE_LOCALSTACK_ACCESS_KEY_ID ?? '',
+        secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
+        region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
     });
     const [bucketName, setBucketName] = useState('');
     const [isPublicAccess, setIsPublicAccess] = useState(true);
     const [isUseLocalstack, setIsUseLocalstack] = useState(true);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string[]>([]);
     const [success, setSuccess] = useState(false);
 
     const handleChange = (field: keyof AWSCredentials) => (event: React.ChangeEvent<HTMLInputElement>) => {
         setCredentials({ ...credentials, [field]: event.target.value });
-        setError(null);
+        setError([]);
         setSuccess(false);
     };
 
     const handleBucketChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         setBucketName(event.target.value);
-        setError(null);
+        setError([]);
         setSuccess(false);
     };
 
     const handleConnect = async () => {
         if (!credentials.accessKeyId || !credentials.secretAccessKey || !bucketName) {
-            setError('Please fill in all fields');
+            setError(['Please fill in all fields']);
             return;
         }
 
         setLoading(true);
-        setError(null);
+        setError([]);
         setSuccess(false);
 
         try {
-            await s3Service.initialize(credentials, bucketName);
+            await s3Service.initialize(credentials, bucketName, isPublicAccess, isUseLocalstack);
             const isConnected = await s3Service.testConnection();
 
             if (isConnected) {
@@ -79,11 +79,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     onLoginSuccess(bucketName);
                 }, 500);
             } else {
-                setError('Failed to connect. Please check your credentials and bucket name.');
+                setError(['Failed to connect.', 'Please check your credentials and bucket name.']);
             }
-        } catch (err) {
-            setError('Connection failed. Please verify your AWS credentials and bucket name.');
-            console.error(err);
+        } catch (err: any) {
+            setError([
+                'Connection failed.',
+                'Please verify your AWS credentials and bucket name.',
+                `Error: ${err.response?.data?.message}`,
+            ]);
+
+            console.error(err.response?.data?.message);
         } finally {
             setLoading(false);
         }
@@ -197,7 +202,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                                 onChange={(e) => {
                                     setIsUseLocalstack(e.target.checked);
                                     if (e.target.checked) {
-                                        setCredentials({ ...credentials, region: defaultOptionValue });
+                                        setCredentials({
+                                            accessKeyId: import.meta.env.VITE_LOCALSTACK_ACCESS_KEY_ID ?? '',
+                                            secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
+                                            region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
+                                        });
                                     }
                                 }}
                             />
@@ -215,11 +224,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         {loading ? 'Connecting...' : 'Connect to S3'}
                     </Button>
 
-                    {error && (
+                    {error?.length ? (
                         <Alert severity="error" className="status-message">
-                            {error}
+                            {error.map((err, index) => (
+                                <p key={index}>{err}</p>
+                            ))}
                         </Alert>
-                    )}
+                    ) : null}
 
                     {success && (
                         <Alert severity="success" className="status-message">

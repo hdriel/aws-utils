@@ -12,19 +12,26 @@ class S3Service {
         });
     }
 
-    async initialize(credentials: AWSCredentials, bucketName: string) {
-        await this.api.post('/config', {
+    async initialize(
+        credentials: AWSCredentials,
+        bucketName: string,
+        isPublicAccess: boolean,
+        isUseLocalstack: boolean
+    ) {
+        await this.api.post('/credentials', {
             accessKeyId: credentials.accessKeyId,
             secretAccessKey: credentials.secretAccessKey,
             region: credentials.region,
             bucket: bucketName,
+            acl: isPublicAccess ? 'public-read-write' : 'private',
+            localstack: isUseLocalstack,
         });
     }
 
     async testConnection(): Promise<boolean> {
         try {
-            const { data: buckets } = await this.api.get('/listBuckets');
-            return !!Array.isArray(buckets);
+            const { data: bucketRoot } = await this.api.get('/buckets');
+            return Array.isArray(bucketRoot);
         } catch (error) {
             console.error('Connection test failed:', error);
             return false;
@@ -118,7 +125,7 @@ class S3Service {
         }
     }
 
-    async getObject(key: string): Promise<AWS.S3.GetObjectOutput> {
+    async getObject(key: string): Promise<any> {
         try {
             const { data: response } = await this.api.get(`/file/${key}/data`);
 

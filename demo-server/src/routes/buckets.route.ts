@@ -8,9 +8,9 @@ import {
 
 export const router: express.Router = express.Router();
 
-router.get('/:bucket', getBucketListCtrl);
+router.get('/', getBucketListCtrl);
 
-router.get('/', getBucketDirectoryTreeCtrl);
+router.get('/:bucket', getBucketDirectoryTreeCtrl);
 
 router.post('/', createBucketCtrl);
 
