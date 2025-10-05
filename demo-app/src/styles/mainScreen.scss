@@ -1,0 +1,45 @@
+.main-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #f7fafc;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      h1 {
+        font-size: 20px;
+        font-weight: 600;
+        color: #1a202c;
+        margin: 0;
+      }
+
+      .bucket-info {
+        font-size: 14px;
+        color: #718096;
+      }
+    }
+
+    .logout-button {
+      text-transform: none;
+      font-weight: 500;
+    }
+  }
+
+  .content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+}
