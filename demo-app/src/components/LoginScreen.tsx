@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
-import { TextField, Button, Alert, CircularProgress, Paper, Box, Typography, MenuItem } from '@mui/material';
-import { CloudUpload } from '@mui/icons-material';
+import {
+    TextField,
+    Button,
+    Alert,
+    CircularProgress,
+    Paper,
+    Box,
+    Typography,
+    MenuItem,
+    InputAdornment,
+    Checkbox,
+    Tooltip,
+    FormControlLabel,
+} from '@mui/material';
+import { CloudUpload, Public, PublicOff } from '@mui/icons-material';
 import { s3Service } from '../services/s3Service.ts';
 import { AWSCredentials } from '../types/aws.ts';
 import '../styles/login.scss';
@@ -10,7 +23,7 @@ interface LoginScreenProps {
 }
 
 const awsRegions = [
-    { value: 'us-east-1', label: 'US East (N. Virginia)' },
+    { value: 'us-east-1', label: 'US East (N. Virginia)', default: true },
     { value: 'us-east-2', label: 'US East (Ohio)' },
     { value: 'us-west-1', label: 'US West (N. California)' },
     { value: 'us-west-2', label: 'US West (Oregon)' },
@@ -19,14 +32,17 @@ const awsRegions = [
     { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
     { value: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
 ];
+const defaultOptionValue = awsRegions.find((v) => v.default)?.value as string;
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const [credentials, setCredentials] = useState<AWSCredentials>({
         accessKeyId: '',
         secretAccessKey: '',
-        region: 'us-east-1',
+        region: defaultOptionValue,
     });
     const [bucketName, setBucketName] = useState('');
+    const [isPublicAccess, setIsPublicAccess] = useState(true);
+    const [isUseLocalstack, setIsUseLocalstack] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
@@ -99,7 +115,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         fullWidth
                         value={credentials.accessKeyId}
                         onChange={handleChange('accessKeyId')}
-                        onKeyPress={handleKeyPress}
+                        onKeyUp={handleKeyPress}
                         disabled={loading}
                         className="form-field"
                         required
@@ -112,7 +128,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         fullWidth
                         value={credentials.secretAccessKey}
                         onChange={handleChange('secretAccessKey')}
-                        onKeyPress={handleKeyPress}
+                        onKeyUp={handleKeyPress}
                         disabled={loading}
                         className="form-field"
                         required
@@ -125,13 +141,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         fullWidth
                         value={credentials.region}
                         onChange={handleChange('region')}
-                        disabled={loading}
                         className="form-field"
                         required
+                        disabled={loading || isUseLocalstack}
                     >
                         {awsRegions.map((option) => (
                             <MenuItem key={option.value} value={option.value}>
-                                {option.label}
+                                {option.label}{' '}
+                                <span style={{ position: 'absolute', right: '24px', color: '#8a8a8a' }}>
+                                    {option.value}
+                                </span>
                             </MenuItem>
                         ))}
                     </TextField>
@@ -142,11 +161,47 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         fullWidth
                         value={bucketName}
                         onChange={handleBucketChange}
-                        onKeyPress={handleKeyPress}
+                        onKeyUp={handleKeyPress}
                         disabled={loading}
                         className="form-field"
                         required
                         helperText="Enter the name of your S3 bucket"
+                        slotProps={{
+                            input: {
+                                endAdornment: (
+                                    <InputAdornment position="end" sx={{ margin: 'auto' }}>
+                                        <Tooltip
+                                            title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}
+                                        >
+                                            <Checkbox
+                                                icon={<PublicOff />}
+                                                checkedIcon={<Public />}
+                                                color={'primary'}
+                                                checked={isPublicAccess}
+                                                onChange={(e) => setIsPublicAccess(e.target.checked)}
+                                            />
+                                        </Tooltip>
+                                    </InputAdornment>
+                                ),
+                            },
+                        }}
+                    />
+
+                    <FormControlLabel
+                        sx={{ paddingX: 1.5 }}
+                        label={<Typography>Localstack</Typography>}
+                        control={
+                            <Checkbox
+                                color="primary"
+                                checked={isUseLocalstack}
+                                onChange={(e) => {
+                                    setIsUseLocalstack(e.target.checked);
+                                    if (e.target.checked) {
+                                        setCredentials({ ...credentials, region: defaultOptionValue });
+                                    }
+                                }}
+                            />
+                        }
                     />
 
                     <Button
