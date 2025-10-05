@@ -1,4 +1,4 @@
-import { AWSCredentials, S3File } from '../types/aws.ts';
+import { AWSCredentials } from '../types/aws.ts';
 import axios, { Axios } from 'axios';
 
 class S3Service {
@@ -48,9 +48,10 @@ class S3Service {
         }
     }
 
-    async listObjects(_prefix: string = ''): Promise<S3File[]> {
+    async listObjects(_prefix: string = ''): Promise<{ directories: any[]; files: any[] }> {
         try {
-            return [];
+            const { data: response } = await this.api.get(`/directories`);
+            return response;
         } catch (error) {
             console.error('Failed to list objects:', error);
             throw error;
@@ -59,8 +60,8 @@ class S3Service {
 
     async createFolder(folderPath: string): Promise<void> {
         try {
-            const { data: response } = await this.api.post('/create-directory', {
-                directoryPath: folderPath,
+            const { data: response } = await this.api.post('/directories', {
+                directory: folderPath,
             });
 
             await response;

@@ -10,16 +10,16 @@ import {
     Typography,
     Box,
 } from '@mui/material';
-import { TreeView, TreeItem } from '@mui/lab';
+import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
 import { Folder, FolderOpen, InsertDriveFile, Add, Delete, ChevronRight, ExpandMore } from '@mui/icons-material';
 import { s3Service } from '../services/s3Service.ts';
 import { formatFileSize } from '../utils/fileUtils.ts';
-import { S3File } from '../types/aws.ts';
 import '../styles/treeView.scss';
 
 interface TreePanelProps {
     onFolderSelect: (path: string) => void;
     onRefresh: () => void;
+    bucketName: string;
     refreshTrigger: number;
 }
 
@@ -32,7 +32,7 @@ interface TreeNode {
     children?: TreeNode[];
 }
 
-export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger }) => {
+export const TreePanel: React.FC<TreePanelProps> = ({ bucketName, onFolderSelect, onRefresh, refreshTrigger }) => {
     const [treeData, setTreeData] = useState<TreeNode[]>([]);
     const [expanded, setExpanded] = useState<string[]>(['root']);
     const [selected, setSelected] = useState<string>('root');
@@ -47,16 +47,29 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
     const loadRootFiles = async () => {
         try {
-            const files = await s3Service.listObjects('');
-            const nodes = buildTreeFromFiles(files);
+            const response = await s3Service.listObjects(bucketName);
+            const nodes = buildTreeFromFiles(response);
             setTreeData(nodes);
         } catch (error) {
             console.error('Failed to load files:', error);
         }
     };
 
-    const buildTreeFromFiles = (files: S3File[]): TreeNode[] => {
+    const buildTreeFromFiles = ({ files, directories }: { directories: string[]; files: any[] }): TreeNode[] => {
         const nodes: TreeNode[] = [];
+
+        directories.forEach((directory) => {
+            const node: TreeNode = {
+                id: directory,
+                name: directory,
+                type: 'folder',
+                path: directory,
+            };
+
+            node.children = [];
+
+            nodes.push(node);
+        });
 
         files.forEach((file) => {
             const node: TreeNode = {
@@ -67,17 +80,13 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 path: file.key,
             };
 
-            if (file.type === 'folder') {
-                node.children = [];
-            }
-
             nodes.push(node);
         });
 
         return nodes;
     };
 
-    const handleNodeToggle = async (nodeId: string) => {
+    const handleNodeToggle = async (_event: any, nodeId: string, isSelected: boolean) => {
         if (expanded.includes(nodeId)) {
             setExpanded(expanded.filter((id) => id !== nodeId));
         } else {
@@ -123,12 +132,13 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         setTreeData(updateNodes(treeData));
     };
 
-    const handleNodeSelect = (nodeId: string) => {
+    const handleNodeSelect = (_event: React.SyntheticEvent | null, nodeId: string) => {
         setSelected(nodeId);
         if (nodeId === 'root') {
             onFolderSelect('');
         } else {
             const node = findNodeById(treeData, nodeId);
+            debugger;
             if (node) {
                 const path = node.type === 'folder' ? node.path : node.path.split('/').slice(0, -1).join('/');
                 onFolderSelect(path);
@@ -142,12 +152,12 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         setLoading(true);
         try {
             const basePath = selected === 'root' ? '' : findNodeById(treeData, selected)?.path || '';
-            const folderPath = basePath ? `${basePath}${newFolderName}/` : `${newFolderName}/`;
+            const folderPath = basePath ? `${basePath}/${newFolderName}/` : `${newFolderName}/`;
 
             await s3Service.createFolder(folderPath);
             setCreateDialogOpen(false);
             setNewFolderName('');
-            loadRootFiles();
+            await loadRootFiles();
             onRefresh();
         } catch (error) {
             console.error('Failed to create folder:', error);
@@ -184,7 +194,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         return nodes.map((node) => (
             <TreeItem
                 key={node.id}
-                nodeId={node.id}
+                itemId={node.id}
                 label={
                     <Box className="item-info">
                         <Box className="item-icon">
@@ -237,24 +247,9 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
             </div>
 
             <div className="tree-content">
-                <TreeView
-                    defaultCollapseIcon={<ExpandMore />}
-                    defaultExpandIcon={<ChevronRight />}
-                    expanded={expanded}
-                    selected={selected}
-                    onNodeToggle={(_event: React.SyntheticEvent, nodeIds: string[]) => {
-                        const newExpanded = nodeIds;
-                        const addedNode = newExpanded.find((id) => !expanded.includes(id));
-                        if (addedNode) {
-                            handleNodeToggle(addedNode);
-                        } else {
-                            setExpanded(newExpanded);
-                        }
-                    }}
-                    onNodeSelect={(_event: React.SyntheticEvent, nodeId: string) => handleNodeSelect(nodeId)}
-                >
+                <SimpleTreeView onItemSelectionToggle={handleNodeToggle}>
                     <TreeItem
-                        nodeId="root"
+                        itemId="root"
                         label={
                             <Box className="item-info">
                                 <Box className="item-icon">
@@ -266,7 +261,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                     >
                         {renderTree(treeData)}
                     </TreeItem>
-                </TreeView>
+                </SimpleTreeView>
             </div>
 
             <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)}>
@@ -279,7 +274,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                         fullWidth
                         value={newFolderName}
                         onChange={(e) => setNewFolderName(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleCreateFolder()}
+                        onKeyUp={(e) => e.key === 'Enter' && handleCreateFolder()}
                     />
                 </DialogContent>
                 <DialogActions>

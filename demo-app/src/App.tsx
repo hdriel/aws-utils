@@ -1,8 +1,8 @@
-// import { useState } from 'react';
+import { useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { LoginScreen } from './components/LoginScreen.tsx';
-// import { MainScreen } from './components/MainScreen';
+import { MainScreen } from './components/MainScreen';
 
 const theme = createTheme({
     palette: {
@@ -19,34 +19,29 @@ const theme = createTheme({
 });
 
 function App() {
-    // const [isAuthenticated, setIsAuthenticated] = useState(false);
-    // const [bucketName, setBucketName] = useState('');
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [bucketName, setBucketName] = useState('');
 
-    const handleLoginSuccess = (_bucket: string) => {
-        // setBucketName(bucket);
-        // setIsAuthenticated(true);
+    const handleLoginSuccess = (bucket: string) => {
+        setBucketName(bucket);
+        setIsAuthenticated(true);
     };
 
-    // const handleLogout = () => {
-    //   setIsAuthenticated(false);
-    //   setBucketName('');
-    // };
+    const handleLogout = () => {
+        setIsAuthenticated(false);
+        setBucketName('');
+    };
 
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
-
-            <LoginScreen onLoginSuccess={handleLoginSuccess} />
+            {isAuthenticated ? (
+                <MainScreen bucketName={bucketName} onLogout={handleLogout} />
+            ) : (
+                <LoginScreen onLoginSuccess={handleLoginSuccess} />
+            )}
         </ThemeProvider>
     );
 }
-
-/*
-{isAuthenticated ? (
-        <MainScreen bucketName={bucketName} onLogout={handleLogout} />
-      ) : (
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
-      )}
- */
 
 export default App;

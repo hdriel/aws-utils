@@ -5,8 +5,11 @@ import {
     getBucketDirectoryTreeCtrl,
     getBucketListCtrl,
 } from '../controls/bucket.control';
+import { logApiMW } from '../middleware/logAPI.mw';
 
 export const router: express.Router = express.Router();
+
+router.use(logApiMW);
 
 router.get('/', getBucketListCtrl);
 

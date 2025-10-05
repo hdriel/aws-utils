@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button, Typography, Box } from '@mui/material';
 import { LogoutOutlined, Storage } from '@mui/icons-material';
 import { TreePanel } from './TreePanel.tsx';
-import { FilePanel } from './FilePanel.tsx';
+// import { FilePan1el } from './FilePanel.tsx';
 import { s3Service } from '../services/s3Service.ts';
 import '../styles/mainScreen.scss';
 
@@ -50,8 +50,13 @@ export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout }) 
             </Box>
 
             <Box className="content">
-                <TreePanel onFolderSelect={setCurrentPath} onRefresh={handleRefresh} refreshTrigger={refreshTrigger} />
-                <FilePanel currentPath={currentPath} onRefresh={handleRefresh} />
+                <TreePanel
+                    bucketName={bucketName}
+                    onFolderSelect={setCurrentPath}
+                    onRefresh={handleRefresh}
+                    refreshTrigger={refreshTrigger}
+                />
+                {/*<FilePanel currentPath={currentPath} onRefresh={handleRefresh} />*/}
             </Box>
         </div>
     );

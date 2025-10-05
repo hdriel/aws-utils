@@ -5,8 +5,11 @@ import {
     getDirectoryListCtrl,
     getDirectoryTreeCtrl,
 } from '../controls/directory.control';
+import { logApiMW } from '../middleware/logAPI.mw';
 
 export const router: express.Router = express.Router();
+
+router.use(logApiMW);
 
 router.get('/', getDirectoryListCtrl);
 

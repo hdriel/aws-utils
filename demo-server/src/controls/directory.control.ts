@@ -17,7 +17,7 @@ export const getDirectoryTreeCtrl = async (req: Request, res: Response, _next: N
 
 export const createDirectoryCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.createDirectory(req.params.directory);
+    const result = await s3BucketUtil.createDirectory(req.body.directory);
 
     res.json(result);
 };
