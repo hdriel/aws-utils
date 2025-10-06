@@ -13,12 +13,12 @@ router.use(logApiMW);
 
 router.get('/', getDirectoryListCtrl);
 
-router.get('/:directory', getDirectoryListCtrl);
-
 router.get('/tree', getDirectoryTreeCtrl);
 
 router.get('/tree/:directory', getDirectoryTreeCtrl);
 
+router.get('/:directory', getDirectoryListCtrl);
+
 router.post('/', createDirectoryCtrl);
 
-router.delete('/:directory', deleteDirectoryCtrl);
+router.delete('/', deleteDirectoryCtrl);

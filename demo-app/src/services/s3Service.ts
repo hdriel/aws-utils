@@ -1,5 +1,6 @@
 import { AWSCredentials } from '../types/aws.ts';
 import axios, { Axios } from 'axios';
+import { AwsTreeItem, TreeItem } from '../types/ui.ts';
 
 class S3Service {
     private api: Axios;
@@ -58,6 +59,16 @@ class S3Service {
         }
     }
 
+    async treeObjects(): Promise<AwsTreeItem> {
+        try {
+            const { data: response } = await this.api.get(`/directories/tree`);
+            return response;
+        } catch (error) {
+            console.error('Failed to list objects:', error);
+            throw error;
+        }
+    }
+
     async createFolder(folderPath: string): Promise<void> {
         try {
             const { data: response } = await this.api.post('/directories', {
@@ -67,6 +78,19 @@ class S3Service {
             await response;
         } catch (error) {
             console.error('Failed to create folder:', error);
+            throw error;
+        }
+    }
+
+    async deleteFolder(directoryPath: string): Promise<void> {
+        try {
+            const { data: response } = await this.api.delete('/directories', {
+                data: { directory: directoryPath },
+            });
+
+            return response;
+        } catch (error) {
+            console.error('Failed to delete folder:', error);
             throw error;
         }
     }
@@ -98,19 +122,6 @@ class S3Service {
             await response;
         } catch (error) {
             console.error('Failed to delete object:', error);
-            throw error;
-        }
-    }
-
-    async deleteFolder(directoryPath: string): Promise<void> {
-        try {
-            const { data: response } = await this.api.delete('/directory', {
-                data: directoryPath,
-            });
-
-            return response;
-        } catch (error) {
-            console.error('Failed to delete folder:', error);
             throw error;
         }
     }

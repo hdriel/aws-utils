@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
+import { Paper, Box } from '@mui/material';
 import {
-    TextField,
-    Button,
-    Alert,
-    CircularProgress,
-    Paper,
-    Box,
-    Typography,
-    MenuItem,
-    InputAdornment,
     Checkbox,
+    InputText,
+    InputPassword,
+    InputSelect,
+    CircularProgress,
+    Button,
+    Typography,
     Tooltip,
-    FormControlLabel,
-} from '@mui/material';
+    Alert,
+} from 'mui-simple';
 import { CloudUpload, Public, PublicOff } from '@mui/icons-material';
 import { s3Service } from '../services/s3Service.ts';
 import { AWSCredentials } from '../types/aws.ts';
@@ -114,7 +112,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 <Box className="login-form">
-                    <TextField
+                    <InputText
                         label="Access Key ID"
                         variant="outlined"
                         fullWidth
@@ -126,7 +124,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         required
                     />
 
-                    <TextField
+                    <InputPassword
                         label="Secret Access Key"
                         variant="outlined"
                         type="password"
@@ -137,9 +135,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         disabled={loading}
                         className="form-field"
                         required
+                        generateRandomAction={false}
+                        copyAction={false}
                     />
 
-                    <TextField
+                    <InputSelect
                         label="Region"
                         variant="outlined"
                         select
@@ -149,18 +149,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         className="form-field"
                         required
                         disabled={loading || isUseLocalstack}
-                    >
-                        {awsRegions.map((option) => (
-                            <MenuItem key={option.value} value={option.value}>
-                                {option.label}{' '}
-                                <span style={{ position: 'absolute', right: '24px', color: '#8a8a8a' }}>
-                                    {option.value}
-                                </span>
-                            </MenuItem>
-                        ))}
-                    </TextField>
+                        options={awsRegions.map((option) => ({ ...option, subtitle: option.value }))}
+                    />
 
-                    <TextField
+                    <InputText
                         label="Bucket Name"
                         variant="outlined"
                         fullWidth
@@ -171,46 +163,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         className="form-field"
                         required
                         helperText="Enter the name of your S3 bucket"
-                        slotProps={{
-                            input: {
-                                endAdornment: (
-                                    <InputAdornment position="end" sx={{ margin: 'auto' }}>
-                                        <Tooltip
-                                            title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}
-                                        >
-                                            <Checkbox
-                                                icon={<PublicOff />}
-                                                checkedIcon={<Public />}
-                                                color={'primary'}
-                                                checked={isPublicAccess}
-                                                onChange={(e) => setIsPublicAccess(e.target.checked)}
-                                            />
-                                        </Tooltip>
-                                    </InputAdornment>
-                                ),
-                            },
-                        }}
+                        endCmp={
+                            <Tooltip title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}>
+                                <Checkbox
+                                    icon={<PublicOff />}
+                                    checkedIcon={<Public />}
+                                    color={'primary'}
+                                    checked={isPublicAccess}
+                                    onChange={(e) => setIsPublicAccess(e.target.checked)}
+                                />
+                            </Tooltip>
+                        }
                     />
 
-                    <FormControlLabel
-                        sx={{ paddingX: 1.5 }}
-                        label={<Typography>Localstack</Typography>}
-                        control={
-                            <Checkbox
-                                color="primary"
-                                checked={isUseLocalstack}
-                                onChange={(e) => {
-                                    setIsUseLocalstack(e.target.checked);
-                                    if (e.target.checked) {
-                                        setCredentials({
-                                            accessKeyId: import.meta.env.VITE_LOCALSTACK_ACCESS_KEY_ID ?? '',
-                                            secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
-                                            region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
-                                        });
-                                    }
-                                }}
-                            />
-                        }
+                    <Checkbox
+                        color="primary"
+                        label={'Localstack'}
+                        checked={isUseLocalstack}
+                        onChange={(e) => {
+                            setIsUseLocalstack(e.target.checked);
+                            if (e.target.checked) {
+                                setCredentials({
+                                    accessKeyId: import.meta.env.VITE_LOCALSTACK_ACCESS_KEY_ID ?? '',
+                                    secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
+                                    region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
+                                });
+                            }
+                        }}
                     />
 
                     <Button

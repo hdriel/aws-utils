@@ -24,7 +24,7 @@ export const createDirectoryCtrl = async (req: Request, res: Response, _next: Ne
 
 export const deleteDirectoryCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.deleteDirectory(req.params.directory);
+    const result = await s3BucketUtil.deleteDirectory(req.body.directory);
 
     res.json(result);
 };

@@ -495,11 +495,12 @@ export class S3BucketUtil {
         children?: Array<any>;
     }> {
         const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+        const directory = directoryPath?.split('/').pop();
 
         const { directories, files } = await this.directoryList(directoryPath);
 
         const tree: any = {
-            name: directoryPath || 'root',
+            name: directory || 'root',
             path: normalizedPath,
             type: 'directory',
             children: [],
