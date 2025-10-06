@@ -49,6 +49,7 @@ export class IAMUtil {
             return response.Users;
         } catch (error) {
             console.error('Error listing IAM users:', error);
+            return null;
         }
     }
 }

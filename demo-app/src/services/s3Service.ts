@@ -98,14 +98,23 @@ class S3Service {
     async uploadFile(file: File, path: string, onProgress?: (progress: number) => void): Promise<void> {
         try {
             const formData = new FormData();
-            formData.append('file', file, file.name);
+            formData.append('file', file);
 
-            const { data: response } = await this.api.post('/files/upload', {
-                file: formData,
-                path,
-                onProgress: onProgress
-                    ? (progress: any) => {
-                          const percentage = (progress.loaded / progress.total) * 100;
+            const pathParts = path.split('/');
+            const filename = pathParts.pop();
+            const directory = pathParts.join('/');
+
+            const { data: response } = await this.api.post('/files/upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'X-Upload-Directory': directory,
+                    'X-Upload-Filename': filename || file.name,
+                },
+                onUploadProgress: onProgress
+                    ? (progressEvent: any) => {
+                          const percentage = progressEvent.total
+                              ? (progressEvent.loaded / progressEvent.total) * 100
+                              : 0;
                           onProgress(percentage);
                       }
                     : undefined,

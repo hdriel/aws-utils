@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { ACLs, AWSConfigSharingUtil } from '../code';
-import { changeS3BucketUtil } from '../shared/s3BucketUtil.shared';
+import { type ACLs, AWSConfigSharingUtil, changeS3BucketUtil } from '../shared';
 
 export const setCredentialsCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const localstack = Boolean(req.body.localstack);

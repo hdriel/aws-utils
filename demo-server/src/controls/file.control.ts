@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
-import { getS3BucketUtil } from '../shared/s3BucketUtil.shared';
+import { getS3BucketUtil, type UploadedS3File } from '../shared';
+import logger from '../logger';
 
 export const getFileInfoCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
@@ -45,15 +46,47 @@ export const deleteFileCtrl = async (req: Request, res: Response, _next: NextFun
     res.json(result);
 };
 
-export const uploadSingleFileCtrl = async (req: Request, res: Response, next: NextFunction) => {
+export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File }, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
 
-    const paths = req.body.path.split('/');
-    paths.pop();
-    const directory = paths.join('/');
+    const directory = (req.headers['x-upload-directory'] as string) || '';
+    const filename = req.headers['x-upload-filename'] as string;
 
-    const result = s3BucketUtil.uploadSingleFile('file', directory);
-    result(req, res, next);
+    if (!directory) {
+        return res.status(400).json({ error: 'Directory header is required' });
+    }
+
+    logger.info(req.id, 'uploading single file', { filename, directory });
+
+    const uploadMiddleware = s3BucketUtil.uploadSingleFile('file', directory, {
+        filename: filename || undefined,
+    });
+
+    const uploadedCallback = (err?: any) => {
+        if (err) {
+            logger.warn(req.id, 'failed to upload single file', { message: err.message });
+            return next(err);
+        }
+
+        const s3File = req.s3File;
+
+        if (s3File) {
+            const file = {
+                key: s3File.key,
+                location: s3File.location,
+                bucket: s3File.bucket,
+                etag: s3File.etag,
+                size: s3File.size,
+            };
+
+            logger.info(req.id, 'file uploaded', file);
+            return res.json({ success: true, file });
+        }
+
+        return res.status(400).json({ error: 'No file uploaded' });
+    };
+
+    return uploadMiddleware(req, res, uploadedCallback);
 };
 
 export const uploadFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {
