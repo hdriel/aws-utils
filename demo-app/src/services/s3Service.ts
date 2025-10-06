@@ -126,9 +126,9 @@ class S3Service {
         }
     }
 
-    async getSignedUrl(key: string): Promise<string> {
+    async getSignedUrl(key: string, expireIn: number): Promise<string> {
         try {
-            const { data: response } = await this.api.get(`/file/${key}/url`);
+            const { data: response } = await this.api.get(`/file/${key}/url${expireIn ? `?expireIn=${expireIn}` : ''}`);
 
             return response;
         } catch (error) {

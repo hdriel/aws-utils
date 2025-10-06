@@ -59,7 +59,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
     const loadFiles = async () => {
         try {
-            const loadedFiles = await s3Service.listObjects(currentPath);
+            const { files: loadedFiles } = await s3Service.listObjects(currentPath);
             setFiles(loadedFiles.filter((f) => f.type === 'file'));
             setSelectedFiles(new Set());
             setVideoPreviewUrl('');
@@ -179,7 +179,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
         try {
             const fileKey = Array.from(selectedFiles)[0];
-            await s3Service.tagObject(fileKey, { version: versionTag });
+            await s3Service.tagObject(fileKey, versionTag);
             setTagDialogOpen(false);
             setVersionTag('');
         } catch (error) {
