@@ -1,6 +1,6 @@
 import { AWSCredentials } from '../types/aws.ts';
 import axios, { Axios } from 'axios';
-import { AwsTreeItem, TreeItem } from '../types/ui.ts';
+import { AwsTreeItem } from '../types/ui.ts';
 
 class S3Service {
     private api: Axios;
