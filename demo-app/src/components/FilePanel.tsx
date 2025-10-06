@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { v4 as uuid } from 'uuid';
 import {
     Box,
     LinearProgress,
@@ -47,8 +48,17 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
     const loadFiles = async () => {
         try {
-            const { files: loadedFiles } = await s3Service.listObjects(currentPath);
-            setFiles(loadedFiles.filter((f) => f.type === 'file'));
+            const files = await s3Service.listObjects(currentPath);
+            console.log('files', files);
+            const loadedFiles: S3File[] = files.map((file) => ({
+                id: uuid(),
+                key: file.Key,
+                name: file.Name,
+                size: file.Size,
+                lastModified: new Date(file.LastModified),
+                type: 'file',
+            }));
+            setFiles(loadedFiles);
             setSelectedFiles(new Set());
             setVideoPreviewUrl('');
             setTempLink('');
@@ -284,7 +294,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                             <Box className="file-items">
                                 {files.map((file) => (
                                     <Box
-                                        key={file.key}
+                                        key={file.id}
                                         className={`file-item ${selectedFiles.has(file.key) ? 'selected' : ''}`}
                                         onClick={() => handleFileSelect(file.key)}
                                     >

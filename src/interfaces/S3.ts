@@ -1,5 +1,6 @@
 export interface ContentFile {
     Key: string;
+    Name: string;
     LastModified: Date;
     ETag: string;
     Size: number;

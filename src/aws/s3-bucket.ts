@@ -367,7 +367,7 @@ export class S3BucketUtil {
 
     async directoryList(directoryPath?: string): Promise<{
         directories: string[];
-        files: Array<ContentFile & { key: string }>;
+        files: ContentFile[];
     }> {
         const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
 
@@ -390,16 +390,17 @@ export class S3BucketUtil {
             .filter((dir) => dir); // Remove empty strings
 
         // Extract files (Contents)
-        const files = (result.Contents || [])
+        const files = (result.Contents || ([] as ContentFile[]))
             .filter((content) => {
                 // Filter out the directory marker itself (empty file with trailing /)
                 return content.Key !== normalizedPath && !content.Key?.endsWith('/');
             })
             .map((content: any) => ({
                 ...content,
-                key: content.Key.replace(normalizedPath, ''),
+                Name: content.Key.replace(normalizedPath, ''),
                 LastModified: new Date(content.LastModified),
-            })) as Array<ContentFile & { key: string }>;
+            }))
+            .filter((content) => content.Name);
 
         return { directories, files };
     }
@@ -509,8 +510,8 @@ export class S3BucketUtil {
         // Add files
         for (const file of files) {
             tree.children.push({
-                name: file.key,
-                path: normalizedPath + file.key,
+                name: file.Name,
+                path: normalizedPath + file.Name,
                 type: 'file',
                 size: file.Size,
                 lastModified: file.LastModified,
@@ -538,7 +539,7 @@ export class S3BucketUtil {
         return await this.execute<HeadObjectCommandOutput>(command);
     }
 
-    async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<Array<ContentFile & { key: string }>> {
+    async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
         const directoryPrefix = directoryPath?.endsWith('/') ? directoryPath : directoryPath ? `${directoryPath}/` : '';
         const prefix = directoryPrefix + (fileNamePrefix || '');
 
@@ -550,11 +551,16 @@ export class S3BucketUtil {
 
         const result = await this.execute<ListObjectsCommandOutput>(command);
 
-        return (result.Contents?.map((content: any) => ({
-            ...content,
-            key: content.Key.replace(prefix, ''),
-            LastModified: new Date(content.LastModified),
-        })) ?? []) as Array<ContentFile & { key: string }>;
+        return (result.Contents ?? ([] as ContentFile[]))
+            .map(
+                (content: any) =>
+                    ({
+                        ...content,
+                        Name: content.Key.replace(prefix, ''),
+                        LastModified: new Date(content.LastModified),
+                    }) as ContentFile
+            )
+            .filter((content) => content.Name);
     }
 
     async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {

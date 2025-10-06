@@ -2,6 +2,17 @@ import { AWSCredentials } from '../types/aws.ts';
 import axios, { Axios } from 'axios';
 import { AwsTreeItem } from '../types/ui.ts';
 
+interface S3ResponseFile {
+    ChecksumAlgorithm: string[];
+    ChecksumType: string;
+    ETag: string;
+    Name: string;
+    Key: string;
+    LastModified: string;
+    Size: number;
+    StorageClass: string;
+}
+
 class S3Service {
     private api: Axios;
 
@@ -49,9 +60,9 @@ class S3Service {
         }
     }
 
-    async listObjects(_prefix: string = ''): Promise<{ directories: any[]; files: any[] }> {
+    async listObjects(prefix: string = ''): Promise<S3ResponseFile[]> {
         try {
-            const { data: response } = await this.api.get(`/directories`);
+            const { data: response } = await this.api.get(`/directories/files${prefix ? `?directory=${prefix}` : ''}`);
             return response;
         } catch (error) {
             console.error('Failed to list objects:', error);

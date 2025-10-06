@@ -5,18 +5,10 @@ export interface AWSCredentials {
 }
 
 export interface S3File {
+    id: string;
     key: string;
     name: string;
     size: number;
     lastModified: Date;
     type: 'file' | 'folder';
-}
-
-export interface TreeNode {
-    id: string;
-    name: string;
-    type: 'file' | 'folder';
-    size?: number;
-    children?: TreeNode[];
-    path: string;
 }

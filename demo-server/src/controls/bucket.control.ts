@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { changeS3BucketUtil, getS3BucketUtil } from '../shared/s3BucketUtil.shared';
+import { changeS3BucketUtil, getS3BucketUtil } from '../shared';
 
 export const getBucketListCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();

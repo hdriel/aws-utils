@@ -2,6 +2,7 @@ import express from 'express';
 import {
     createDirectoryCtrl,
     deleteDirectoryCtrl,
+    getDirectoryFileListCtrl,
     getDirectoryListCtrl,
     getDirectoryTreeCtrl,
 } from '../controls/directory.control';
@@ -13,11 +14,11 @@ router.use(logApiMW);
 
 router.get('/', getDirectoryListCtrl);
 
+router.get('/files', getDirectoryFileListCtrl);
+
 router.get('/tree', getDirectoryTreeCtrl);
 
 router.get('/tree/:directory', getDirectoryTreeCtrl);
-
-router.get('/:directory', getDirectoryListCtrl);
 
 router.post('/', createDirectoryCtrl);
 
