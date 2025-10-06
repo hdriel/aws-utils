@@ -18,11 +18,11 @@ router.use(logApiMW);
 router.post('/content', uploadFileDataCtrl);
 router.post('/upload', uploadSingleFileCtrl);
 
-router.get('/:file/info', getFileInfoCtrl);
-router.get('/:file/data', getFileDataCtrl);
-router.get('/:file/url', getFileUrlCtrl);
-router.get('/:file/version', getFileVersionCtrl);
+router.get('/info', getFileInfoCtrl);
+router.get('/data', getFileDataCtrl);
+router.get('/url', getFileUrlCtrl);
 
-router.put('/:file/version', toggingFileVersionCtrl);
+router.get('/version', getFileVersionCtrl);
+router.put('/version', toggingFileVersionCtrl);
 
-router.delete('/:file', deleteFileCtrl);
+router.delete('/', deleteFileCtrl);

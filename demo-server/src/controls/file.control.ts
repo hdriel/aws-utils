@@ -18,8 +18,10 @@ export const getFileDataCtrl = async (req: Request, res: Response, _next: NextFu
 
 export const getFileUrlCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    const filePath = req.query.filePath as string;
+
     const result = await s3BucketUtil.generateSignedFileUrl(
-        req.params.file,
+        filePath,
         req.query?.expireIn ? +req.query.expireIn : undefined
     );
 

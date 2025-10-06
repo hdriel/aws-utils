@@ -1,5 +1,6 @@
 import { AWSCredentials } from '../types/aws.ts';
 import axios, { Axios } from 'axios';
+import qs from 'qs';
 import { AwsTreeItem } from '../types/ui.ts';
 
 interface S3ResponseFile {
@@ -60,9 +61,11 @@ class S3Service {
         }
     }
 
-    async listObjects(prefix: string = ''): Promise<S3ResponseFile[]> {
+    async listObjects(directory: string = ''): Promise<S3ResponseFile[]> {
         try {
-            const { data: response } = await this.api.get(`/directories/files${prefix ? `?directory=${prefix}` : ''}`);
+            const query = qs.parse({ directory });
+
+            const { data: response } = await this.api.get(`/directories/files?${query}`);
             return response;
         } catch (error) {
             console.error('Failed to list objects:', error);
@@ -138,9 +141,10 @@ class S3Service {
         }
     }
 
-    async deleteObject(key: string): Promise<void> {
+    async deleteObject(filePath: string): Promise<void> {
         try {
-            const { data: response } = await this.api.delete(`/file/${key}`);
+            const query = qs.parse({ filePath });
+            const { data: response } = await this.api.delete(`/files?${query}`);
 
             await response;
         } catch (error) {
@@ -149,9 +153,10 @@ class S3Service {
         }
     }
 
-    async getSignedUrl(key: string, expireIn: number): Promise<string> {
+    async getSignedUrl(filePath: string, expireIn: number): Promise<string> {
         try {
-            const { data: response } = await this.api.get(`/file/${key}/url${expireIn ? `?expireIn=${expireIn}` : ''}`);
+            const query = qs.parse({ expireIn, filePath });
+            const { data: response } = await this.api.get(`/files/url?${query}`);
 
             return response;
         } catch (error) {
@@ -160,9 +165,10 @@ class S3Service {
         }
     }
 
-    async getObject(key: string): Promise<any> {
+    async getObject(filePath: string): Promise<any> {
         try {
-            const { data: response } = await this.api.get(`/file/${key}/data`);
+            const query = qs.parse({ filePath });
+            const { data: response } = await this.api.get(`/file/data?${query}`);
 
             return response;
         } catch (error) {
@@ -171,9 +177,10 @@ class S3Service {
         }
     }
 
-    async tagObject(key: string, version: string): Promise<void> {
+    async tagObject(filePath: string, version: string): Promise<void> {
         try {
-            const { data: response } = await this.api.put(`/file/${key}/version`, {
+            const query = qs.parse({ filePath });
+            const { data: response } = await this.api.put(`/file/version?${query}`, {
                 version,
             });
 
