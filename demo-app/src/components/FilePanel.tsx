@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    Button,
-    IconButton,
-    Typography,
     Box,
     LinearProgress,
     Dialog,
@@ -13,18 +10,9 @@ import {
     InputAdornment,
     Checkbox,
 } from '@mui/material';
-import {
-    CloudUpload,
-    Image,
-    VideoLibrary,
-    Download,
-    Delete,
-    Link as LinkIcon,
-    Label,
-    InsertDriveFile,
-    ContentCopy,
-    FolderOpen,
-} from '@mui/icons-material';
+import { Typography, Button } from 'mui-simple';
+
+import { Image, VideoLibrary, InsertDriveFile, FolderOpen } from '@mui/icons-material';
 import JSZip from 'jszip';
 import { s3Service } from '../services/s3Service.ts';
 import { formatFileSize, isVideoFile, isImageFile, downloadFile } from '../utils/fileUtils.ts';
@@ -230,28 +218,26 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                     <Box className="upload-buttons">
                         <Button
                             variant="contained"
-                            startIcon={<CloudUpload />}
+                            startIcon="CloudUpload"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
-                        >
-                            Upload File
-                        </Button>
+                            label="Upload File"
+                        />
                         <Button
                             variant="outlined"
-                            startIcon={<Image />}
+                            startIcon="Image"
                             onClick={() => imageInputRef.current?.click()}
                             disabled={uploading}
-                        >
-                            Upload Image
-                        </Button>
+                            label="Upload Image"
+                        />
+
                         <Button
                             variant="outlined"
-                            startIcon={<VideoLibrary />}
+                            startIcon="VideoLibrary"
                             onClick={() => videoInputRef.current?.click()}
                             disabled={uploading}
-                        >
-                            Upload Video
-                        </Button>
+                            label="Upload Video"
+                        />
                     </Box>
 
                     <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
@@ -337,33 +323,31 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                     Actions
                                 </Typography>
                                 <Box className="actions-grid">
-                                    <Button variant="outlined" startIcon={<Download />} onClick={handleDownload}>
+                                    <Button variant="outlined" startIcon="Download" onClick={handleDownload}>
                                         Download {selectedFiles.size > 1 ? 'as ZIP' : ''}
                                     </Button>
                                     <Button
                                         variant="outlined"
                                         color="error"
-                                        startIcon={<Delete />}
+                                        startIcon="Delete"
                                         onClick={() => setDeleteDialogOpen(true)}
-                                    >
-                                        Delete Selected
-                                    </Button>
+                                        label="Delete Selected"
+                                    />
+
                                     {selectedFiles.size === 1 && (
                                         <>
                                             <Button
                                                 variant="outlined"
-                                                startIcon={<Label />}
+                                                startIcon="Label"
                                                 onClick={() => setTagDialogOpen(true)}
-                                            >
-                                                Tag Version
-                                            </Button>
+                                                label="Tag Version"
+                                            />
                                             <Button
                                                 variant="outlined"
-                                                startIcon={<LinkIcon />}
+                                                startIcon="Link"
                                                 onClick={generateTempLink}
-                                            >
-                                                Generate Link
-                                            </Button>
+                                                label="Generate Link"
+                                            />
                                         </>
                                     )}
                                 </Box>
@@ -440,9 +424,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                             readOnly: true,
                             endAdornment: (
                                 <InputAdornment position="end">
-                                    <IconButton onClick={copyToClipboard} edge="end">
-                                        <ContentCopy />
-                                    </IconButton>
+                                    <Button onClick={copyToClipboard} edge="end" icon="ContentCopy" />
                                 </InputAdornment>
                             ),
                         }}

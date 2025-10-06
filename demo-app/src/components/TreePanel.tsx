@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { DialogTitle, DialogContent, DialogActions, Box } from '@mui/material';
-import { TreeView, Button, Typography, InputText, Dialog, TreeViewNodeProps } from 'mui-simple';
+import { TreeView, Button, Typography, InputText, Dialog, TreeViewNodeProps, SVGIcon } from 'mui-simple';
 import { s3Service } from '../services/s3Service';
 import '../styles/treeView.scss';
 import { AwsTreeItem } from '../types/ui';
@@ -43,17 +43,50 @@ interface TreePanelProps {
 interface TreeNodeItem extends TreeViewNodeProps {
     directory: boolean;
     path: string;
+    name: string;
     children: TreeNodeItem[];
 }
 
-function buildTreeData(root: AwsTreeItem): TreeNodeItem | null {
+const treeItemIcon = {
+    file: 'InsertDriveFile',
+    directory: 'FolderOpenTwoTone',
+    video: 'PlayCircle',
+    image: 'Image',
+};
+
+const getItemIcon = (node: AwsTreeItem | null) => {
+    if (!node) return;
+
+    if (node.type === 'directory') return treeItemIcon.directory;
+
+    const ext = node.name.split('.').pop()?.toLowerCase();
+    switch (ext) {
+        case 'png':
+            return treeItemIcon.image;
+        case 'mp4':
+            return treeItemIcon.video;
+        default:
+            return treeItemIcon.file;
+    }
+};
+
+function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
+    const space = `_`.repeat(level + (root.type === 'directory' ? 0 : 1));
     return root
         ? {
               id: uuidv4(),
               path: root.path,
-              label: root.name,
+              label: (
+                  <Box display="flex" gap={1}>
+                      {space}
+                      <SVGIcon muiIconName={getItemIcon(root)} />
+                      <Typography>{root.name}</Typography>
+                  </Box>
+              ) as any,
+              name: root.name,
               directory: root.type === 'directory',
-              children: root.children?.map((node) => buildTreeData(node) as TreeNodeItem).filter((v) => v) ?? [],
+              children:
+                  root.children?.map((node) => buildTreeData(node, level + 1) as TreeNodeItem).filter((v) => v) ?? [],
           }
         : null;
 }
@@ -219,7 +252,14 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                             disabled={!selectedNode?.path}
                             color="error"
                             variant="outlined"
-                            label={selectedNode?.label}
+                            sx={{ justifyContent: 'space-between' }}
+                            label={selectedNode?.name}
+                            startIcon={getItemIcon({
+                                type: selectedNode.directory ? 'directory' : 'file',
+                                name: selectedNode.name,
+                                path: selectedNode.path,
+                                children: [],
+                            } as AwsTreeItem)}
                             endIcon="Delete"
                         />
                     )}
@@ -228,8 +268,6 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
             <div className="tree-content">
                 <TreeView
-                    expandIcon="FolderOpenOutlined"
-                    collapseIcon="FolderOpenTwoTone"
                     // expanded={expanded}
                     selected={selected}
                     // onExpanded={(nodeIds: string[]) => {
