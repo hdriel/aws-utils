@@ -1,4 +1,4 @@
-import { ACLs, S3BucketMulterUtil } from 'aws-api-utils';
+import { ACLs, S3BucketMulterUtil } from '../code';
 
 let s3BucketUtil: S3BucketMulterUtil;
 

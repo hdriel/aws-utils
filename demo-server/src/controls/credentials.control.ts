@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { ACLs, AWSConfigSharingUtil } from 'aws-api-utils';
+import { ACLs, AWSConfigSharingUtil } from '../code';
 import { changeS3BucketUtil } from '../shared/s3BucketUtil.shared';
 
 export const setCredentialsCtrl = async (req: Request, res: Response, _next: NextFunction) => {

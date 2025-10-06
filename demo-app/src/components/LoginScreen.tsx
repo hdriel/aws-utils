@@ -38,7 +38,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
         region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
     });
-    const [bucketName, setBucketName] = useState('');
+    const [bucketName, setBucketName] = useState('demo');
     const [isPublicAccess, setIsPublicAccess] = useState(true);
     const [isUseLocalstack, setIsUseLocalstack] = useState(true);
     const [loading, setLoading] = useState(false);
