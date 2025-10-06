@@ -85,14 +85,17 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
     const findNodeById = (node: TreeNodeItem | null, nodeId: string): TreeNodeItem | null => {
         if (!node) return null;
+        const stack = [node];
 
-        if (node.id === nodeId) {
-            return node;
+        while (stack.length) {
+            const currNode = stack.shift();
+            if (!currNode) break;
+            if (currNode.id === nodeId) {
+                return currNode;
+            }
+            stack.push(...currNode.children);
         }
-        if (node.children?.length) {
-            const found = node.children.find((node) => findNodeById(node, nodeId));
-            if (found) return found;
-        }
+
         return null;
     };
 
@@ -141,20 +144,16 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
     // };
     //
 
-    const handleNodeSelect = (nodeId: string) => {
-        setSelected(nodeId);
-
-        if (nodeId === 'root') {
-            onFolderSelect('');
+    useEffect(() => {
+        if (selectedNode?.path) {
+            const path = selectedNode.directory
+                ? selectedNode.path
+                : selectedNode.path.split('/').slice(0, -1).join('/');
+            onFolderSelect(path);
         } else {
-            const node = findNodeById(treeData, nodeId);
-
-            if (node) {
-                const path = node.directory ? node.path : node.path.split('/').slice(0, -1).join('/');
-                onFolderSelect(path);
-            }
+            onFolderSelect('');
         }
-    };
+    }, [selectedNode]);
 
     const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;
@@ -241,7 +240,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                     //     }
                     //     setExpanded(newExpanded);
                     // }}
-                    onSelected={(nodeIds: string[]) => handleNodeSelect(nodeIds[0])}
+                    onSelected={(nodeIds: string[]) => setSelected(nodeIds[0])}
                     nodes={treeData ? [treeData] : undefined}
                 ></TreeView>
             </div>
