@@ -45,9 +45,21 @@ export const deleteFileCtrl = async (req: Request, res: Response, _next: NextFun
     res.json(result);
 };
 
-export const uploadFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const uploadSingleFileCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.uploadFile(req.params.file, req.body);
+
+    const paths = req.body.path.split('/');
+    paths.pop();
+    const directory = paths.join('/');
+
+    const result = s3BucketUtil.uploadSingleFile('file', directory);
+    result(req, res, next);
+};
+
+export const uploadFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+    const s3BucketUtil = getS3BucketUtil();
+    const filename = req.body.path;
+    const result = await s3BucketUtil.uploadFile(filename, req.body.file);
 
     res.json(result);
 };

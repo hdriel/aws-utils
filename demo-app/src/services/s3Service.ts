@@ -97,7 +97,7 @@ class S3Service {
 
     async uploadFile(file: File, path: string, onProgress?: (progress: number) => void): Promise<void> {
         try {
-            const { data: response } = await this.api.post('/upload-file', {
+            const { data: response } = await this.api.post('/files/upload', {
                 file,
                 path,
                 onProgress: onProgress
