@@ -63,7 +63,7 @@ class S3Service {
 
     async listObjects(directory: string = ''): Promise<S3ResponseFile[]> {
         try {
-            const query = qs.parse({ directory });
+            const query = qs.stringify({ directory });
 
             const { data: response } = await this.api.get(`/directories/files?${query}`);
             return response;
@@ -143,7 +143,7 @@ class S3Service {
 
     async deleteObject(filePath: string): Promise<void> {
         try {
-            const query = qs.parse({ filePath });
+            const query = qs.stringify({ filePath });
             const { data: response } = await this.api.delete(`/files?${query}`);
 
             await response;
@@ -155,7 +155,7 @@ class S3Service {
 
     async getSignedUrl(filePath: string, expireIn: number): Promise<string> {
         try {
-            const query = qs.parse({ expireIn, filePath });
+            const query = qs.stringify({ expireIn: String(expireIn), filePath });
             const { data: response } = await this.api.get(`/files/url?${query}`);
 
             return response;
@@ -167,7 +167,7 @@ class S3Service {
 
     async getObject(filePath: string): Promise<any> {
         try {
-            const query = qs.parse({ filePath });
+            const query = qs.stringify({ filePath });
             const { data: response } = await this.api.get(`/file/data?${query}`);
 
             return response;
@@ -179,7 +179,7 @@ class S3Service {
 
     async tagObject(filePath: string, version: string): Promise<void> {
         try {
-            const query = qs.parse({ filePath });
+            const query = qs.stringify({ filePath });
             const { data: response } = await this.api.put(`/file/version?${query}`, {
                 version,
             });

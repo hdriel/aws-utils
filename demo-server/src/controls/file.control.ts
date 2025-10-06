@@ -4,14 +4,18 @@ import logger from '../logger';
 
 export const getFileInfoCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.fileInfo(req.params.file);
+    const filePath = req.query.filePath as string;
+
+    const result = await s3BucketUtil.fileInfo(filePath);
 
     res.json(result);
 };
 
 export const getFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.fileContent(req.params.file, 'utf8');
+    const filePath = req.query.filePath as string;
+
+    const result = await s3BucketUtil.fileContent(filePath, 'utf8');
 
     res.json(result);
 };
@@ -19,31 +23,35 @@ export const getFileDataCtrl = async (req: Request, res: Response, _next: NextFu
 export const getFileUrlCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
     const filePath = req.query.filePath as string;
+    const expireIn = req.query?.expireIn ? +req.query.expireIn : undefined;
 
-    const result = await s3BucketUtil.generateSignedFileUrl(
-        filePath,
-        req.query?.expireIn ? +req.query.expireIn : undefined
-    );
+    const result = await s3BucketUtil.generateSignedFileUrl(filePath, expireIn);
 
     res.json(result);
 };
 
 export const getFileVersionCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.fileVersion(req.params.file);
+    const filePath = req.query.filePath as string;
+
+    const result = await s3BucketUtil.fileVersion(filePath);
 
     res.json(result);
 };
 export const toggingFileVersionCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.taggingFile(req.params.file, req.body);
+    const filePath = req.query.filePath as string;
+
+    const result = await s3BucketUtil.taggingFile(filePath, req.body);
 
     res.json(result);
 };
 
 export const deleteFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.deleteDirectory(req.params.directory);
+    const filePath = req.query.filePath as string;
+
+    const result = await s3BucketUtil.deleteFile(filePath);
 
     res.json(result);
 };
