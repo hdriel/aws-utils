@@ -59,12 +59,15 @@ export const deleteFileCtrl = async (req: Request, res: Response, _next: NextFun
 export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File }, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
 
-    const directory = (req.headers['x-upload-directory'] as string) || '';
-    const filename = req.headers['x-upload-filename'] as string;
+    const encodedDirectory = (req.headers['x-upload-directory'] as string) || '';
+    const encodedFilename = req.headers['x-upload-filename'] as string;
 
-    if (!directory) {
+    if (!encodedDirectory) {
         return res.status(400).json({ error: 'Directory header is required' });
     }
+
+    const directory = decodeURIComponent(encodedDirectory);
+    const filename = encodedFilename ? decodeURIComponent(encodedFilename) : undefined;
 
     logger.info(req.id, 'uploading single file', { filename, directory });
 

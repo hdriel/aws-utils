@@ -118,11 +118,15 @@ class S3Service {
             const filename = pathParts.pop();
             const directory = pathParts.join('/') || '/';
 
+            // Encode directory and filename to handle non-Latin characters
+            const encodedDirectory = encodeURIComponent(directory);
+            const encodedFilename = encodeURIComponent(filename || file.name);
+
             const { data: response } = await this.api.post('/files/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
-                    'X-Upload-Directory': directory,
-                    'X-Upload-Filename': filename || file.name,
+                    'X-Upload-Directory': encodedDirectory,
+                    'X-Upload-Filename': encodedFilename,
                 },
                 onUploadProgress: onProgress
                     ? (progressEvent: any) => {
