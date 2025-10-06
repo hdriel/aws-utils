@@ -87,7 +87,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
         setUploadingFileName(file.name);
 
         try {
-            const filePath = currentPath ? `${currentPath}${file.name}` : file.name;
+            const filePath = currentPath ? `${currentPath}${file.name}` : `/${file.name}`;
             await s3Service.uploadFile(file, filePath, (progress) => {
                 setUploadProgress(progress);
             });

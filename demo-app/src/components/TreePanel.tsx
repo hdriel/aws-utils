@@ -193,7 +193,9 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
         setLoading(true);
         try {
-            const basePath = selected === 'root' ? '' : findNodeById(treeData, selected)?.path || '';
+            if (!selectedNode) return;
+
+            const basePath = selectedNode?.path === '' ? '' : selectedNode?.path || '';
             const folderPath = basePath ? `${basePath}/${newFolderName}/` : `${newFolderName}/`;
 
             await s3Service.createFolder(folderPath);

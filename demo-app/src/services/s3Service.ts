@@ -102,7 +102,7 @@ class S3Service {
 
             const pathParts = path.split('/');
             const filename = pathParts.pop();
-            const directory = pathParts.join('/');
+            const directory = pathParts.join('/') || '/';
 
             const { data: response } = await this.api.post('/files/upload', formData, {
                 headers: {
