@@ -1,9 +1,3 @@
-import { AwsTreeItem } from '../types/ui.ts';
-import { v4 as uuidv4 } from 'uuid';
-import { Box } from '@mui/material';
-import { SVGIcon, Typography } from 'mui-simple';
-import React from 'react';
-
 export function formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 B';
 
