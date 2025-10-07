@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuid } from 'uuid';
+import { Box, DialogTitle } from '@mui/material';
 import {
-    Box,
-    LinearProgress,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    TextField,
-    InputAdornment,
+    Typography,
+    Button,
     Checkbox,
-} from '@mui/material';
-import { Typography, Button } from 'mui-simple';
+    SVGIcon,
+    LinearProgress,
+    InputText,
+    Dialog,
+    List,
+    type ListItemProps,
+} from 'mui-simple';
 
-import { Image, VideoLibrary, InsertDriveFile, FolderOpen } from '@mui/icons-material';
+import { FolderOpen } from '@mui/icons-material';
 import JSZip from 'jszip';
 import { s3Service } from '../services/s3Service.ts';
-import { formatFileSize, isVideoFile, isImageFile, downloadFile } from '../utils/fileUtils.ts';
+import { formatFileSize, isVideoFile, downloadFile, getFileIcon } from '../utils/fileUtils.ts';
 import { S3File } from '../types/aws.ts';
 import '../styles/filePanel.scss';
 
@@ -301,19 +301,13 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                         <Box className="file-info">
                                             <Checkbox
                                                 checked={selectedFiles.has(file.key)}
-                                                onClick={(e) => {
+                                                onClick={(e: any) => {
                                                     e.stopPropagation();
                                                     handleFileSelect(file.key);
                                                 }}
                                             />
                                             <Box className="file-icon">
-                                                {isImageFile(file.name) ? (
-                                                    <Image />
-                                                ) : isVideoFile(file.name) ? (
-                                                    <VideoLibrary />
-                                                ) : (
-                                                    <InsertDriveFile />
-                                                )}
+                                                <SVGIcon muiIconName={getFileIcon(file.name)} />
                                             </Box>
                                             <Box className="file-details">
                                                 <Typography className="file-name">{file.name}</Typography>
@@ -333,11 +327,16 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                     Actions
                                 </Typography>
                                 <Box className="actions-grid">
-                                    <Button variant="outlined" startIcon="Download" onClick={handleDownload}>
-                                        Download {selectedFiles.size > 1 ? 'as ZIP' : ''}
-                                    </Button>
                                     <Button
                                         variant="outlined"
+                                        startIcon="Download"
+                                        onClick={handleDownload}
+                                        fullWidth
+                                        label={`Download ${selectedFiles.size > 1 ? 'as ZIP' : ''}`}
+                                    />
+                                    <Button
+                                        variant="outlined"
+                                        fullWidth
                                         color="error"
                                         startIcon="Delete"
                                         onClick={() => setDeleteDialogOpen(true)}
@@ -348,12 +347,14 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                         <>
                                             <Button
                                                 variant="outlined"
+                                                fullWidth
                                                 startIcon="Label"
                                                 onClick={() => setTagDialogOpen(true)}
                                                 label="Tag Version"
                                             />
                                             <Button
                                                 variant="outlined"
+                                                fullWidth
                                                 startIcon="Link"
                                                 onClick={generateTempLink}
                                                 label="Generate Link"
@@ -383,66 +384,66 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                 )}
             </div>
 
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+            <Dialog
+                open={deleteDialogOpen}
+                onClose={() => setDeleteDialogOpen(false)}
+                title="Confirm Delete"
+                actions={[
+                    { onClick: () => setDeleteDialogOpen(false), label: 'Cancel' },
+                    { onClick: handleDelete, variant: 'contained', color: 'error', label: 'Delete' },
+                ]}
+            >
                 <DialogTitle>Confirm Delete</DialogTitle>
-                <DialogContent>
-                    <Typography>
-                        Are you sure you want to delete {selectedFiles.size} file{selectedFiles.size > 1 ? 's' : ''}?
-                        This action cannot be undone.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleDelete} variant="contained" color="error">
-                        Delete
-                    </Button>
-                </DialogActions>
+                <Typography>
+                    Are you sure you want to delete {selectedFiles.size} file{selectedFiles.size > 1 ? 's' : ''}?
+                </Typography>
+                <Typography>This action cannot be undone.</Typography>
+                <List
+                    buttonItems={false}
+                    items={[...selectedFiles].map((file) => ({ title: file }) as ListItemProps)}
+                />
             </Dialog>
 
-            <Dialog open={tagDialogOpen} onClose={() => setTagDialogOpen(false)}>
+            <Dialog
+                open={tagDialogOpen}
+                title="Tag File Version"
+                onClose={() => setTagDialogOpen(false)}
+                actions={[
+                    { onClick: () => setTagDialogOpen(false), label: 'Cancel' },
+                    { onClick: handleTagVersion, variant: 'contained', label: 'Apply Tag' },
+                ]}
+            >
                 <DialogTitle>Tag File Version</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Version"
-                        fullWidth
-                        placeholder="e.g., 1.0.0"
-                        value={versionTag}
-                        onChange={(e) => setVersionTag(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleTagVersion()}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setTagDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleTagVersion} variant="contained">
-                        Apply Tag
-                    </Button>
-                </DialogActions>
+                <InputText
+                    autoFocus
+                    margin="dense"
+                    label="Version"
+                    fullWidth
+                    placeholder="e.g., 1.0.0"
+                    value={versionTag}
+                    onChange={(e) => setVersionTag(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleTagVersion()}
+                />
             </Dialog>
 
-            <Dialog open={linkDialogOpen} onClose={() => setLinkDialogOpen(false)} maxWidth="md" fullWidth>
+            <Dialog
+                open={linkDialogOpen}
+                onClose={() => setLinkDialogOpen(false)}
+                maxWidth="md"
+                fullWidth
+                title="Temporary Link"
+                actions={[{ onClick: () => setLinkDialogOpen(false), label: 'Close' }]}
+            >
                 <DialogTitle>Temporary Link</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2" sx={{ mb: 2 }}>
-                        This link will expire in 1 hour
-                    </Typography>
-                    <TextField
-                        fullWidth
-                        value={tempLink}
-                        InputProps={{
-                            readOnly: true,
-                            endAdornment: (
-                                <InputAdornment position="end">
-                                    <Button onClick={copyToClipboard} edge="end" icon="ContentCopy" />
-                                </InputAdornment>
-                            ),
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setLinkDialogOpen(false)}>Close</Button>
-                </DialogActions>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                    This link will expire in 1 hour
+                </Typography>
+                <InputText
+                    fullWidth
+                    value={tempLink}
+                    endCmp={[<Button onClick={copyToClipboard} edge="end" icon="ContentCopy" />]}
+                    readOnly
+                />
             </Dialog>
         </div>
     );

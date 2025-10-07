@@ -5,6 +5,7 @@ import { TreeView, Button, Typography, InputText, Dialog, TreeViewNodeProps, SVG
 import { s3Service } from '../services/s3Service';
 import '../styles/treeView.scss';
 import { AwsTreeItem } from '../types/ui';
+import { getFileIcon } from '../utils/fileUtils.ts';
 
 // const renderTree = (nodes: undefined | TreeNode[]): any => {
 //     return (
@@ -47,29 +48,6 @@ interface TreeNodeItem extends TreeViewNodeProps {
     children: TreeNodeItem[];
 }
 
-const treeItemIcon = {
-    file: 'InsertDriveFile',
-    directory: 'FolderOpenTwoTone',
-    video: 'PlayCircle',
-    image: 'Image',
-};
-
-const getItemIcon = (node: AwsTreeItem | null) => {
-    if (!node) return;
-
-    if (node.type === 'directory') return treeItemIcon.directory;
-
-    const ext = node.name.split('.').pop()?.toLowerCase();
-    switch (ext) {
-        case 'png':
-            return treeItemIcon.image;
-        case 'mp4':
-            return treeItemIcon.video;
-        default:
-            return treeItemIcon.file;
-    }
-};
-
 function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
     const space = `_`.repeat(level + (root.type === 'directory' ? 0 : 1));
     return root
@@ -79,7 +57,7 @@ function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
               label: (
                   <Box display="flex" gap={1}>
                       {space}
-                      <SVGIcon muiIconName={getItemIcon(root)} />
+                      <SVGIcon muiIconName={getFileIcon(root.name, root.type === 'directory')} />
                       <Typography>{root.name}</Typography>
                   </Box>
               ) as any,
@@ -256,12 +234,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                             variant="outlined"
                             sx={{ justifyContent: 'space-between' }}
                             label={selectedNode?.name}
-                            startIcon={getItemIcon({
-                                type: selectedNode.directory ? 'directory' : 'file',
-                                name: selectedNode.name,
-                                path: selectedNode.path,
-                                children: [],
-                            } as AwsTreeItem)}
+                            startIcon={getFileIcon(selectedNode.name, selectedNode.directory)}
                             endIcon="Delete"
                         />
                     )}
