@@ -25,6 +25,7 @@ export async function downloadFile(url: string, filename: string): Promise<void>
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
 }
 
 const treeItemIcon = {

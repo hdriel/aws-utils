@@ -12,10 +12,10 @@ import {
     List,
     type ListItemProps,
     Text,
+    CircularProgress,
 } from 'mui-simple';
 
 import { FolderOpen } from '@mui/icons-material';
-import JSZip from 'jszip';
 import { s3Service } from '../services/s3Service.ts';
 import { formatFileSize, isVideoFile, downloadFile, getFileIcon } from '../utils/fileUtils.ts';
 import { S3File } from '../types/aws.ts';
@@ -30,6 +30,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     const [files, setFiles] = useState<S3File[]>([]);
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [uploading, setUploading] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadingFileName, setUploadingFileName] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -117,13 +118,17 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
         }
     };
 
+    const handleAbortDownload = () => {
+        s3Service.abortDownloadFiles();
+    };
+
     const handleDownload = async () => {
         if (selectedFiles.size === 0) return;
 
         try {
             if (selectedFiles.size === 1) {
                 const fileKey = Array.from(selectedFiles)[0];
-                const url = await s3Service.getSignedUrl(fileKey, 3600);
+                const url = await s3Service.getSignedUrl(fileKey, 60);
                 const fileName = files.find((f) => f.key === fileKey)?.name || 'download';
                 await downloadFile(url, fileName);
             } else {
@@ -135,25 +140,10 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     };
 
     const downloadMultipleAsZip = async () => {
-        const zip = new JSZip();
+        const filePath: string[] = Array.from(selectedFiles).filter((fileKey) => files.find((f) => f.key === fileKey));
+        const url = await s3Service.downloadFilesAsZip(filePath);
 
-        for (const fileKey of Array.from(selectedFiles)) {
-            try {
-                const file = files.find((f) => f.key === fileKey);
-                if (!file) continue;
-
-                const obj = await s3Service.getObject(fileKey);
-                const body = obj.Body as Uint8Array;
-                zip.file(file.name, body);
-            } catch (error) {
-                console.error(`Failed to add ${fileKey} to zip:`, error);
-            }
-        }
-
-        const content = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(content);
-        await downloadFile(url, 'files.zip');
-        URL.revokeObjectURL(url);
+        return downloadFile(url, 'aws-s3-bucket-utils-download.zip');
     };
 
     const handleDelete = async () => {
@@ -331,9 +321,41 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                     <Button
                                         variant="outlined"
                                         startIcon="Download"
-                                        onClick={handleDownload}
+                                        onClick={() => {
+                                            if (isDownloading) {
+                                                handleAbortDownload();
+                                            } else {
+                                                setIsDownloading(true);
+                                                handleDownload()
+                                                    .then(() => {
+                                                        console.log('download as zip done!');
+                                                    })
+                                                    .finally(() => {
+                                                        setIsDownloading(false);
+                                                    });
+                                            }
+                                        }}
                                         fullWidth
-                                        label={`Download ${selectedFiles.size > 1 ? 'as ZIP' : ''}`}
+                                        color={isDownloading ? 'info' : 'primary'}
+                                        endIcon={
+                                            isDownloading ? (
+                                                <Box
+                                                    sx={{
+                                                        position: 'absolute',
+                                                        right: '12px',
+                                                        top: '5px',
+                                                        bottom: 0,
+                                                    }}
+                                                >
+                                                    <CircularProgress color="info" size={15} />
+                                                </Box>
+                                            ) : null
+                                        }
+                                        label={
+                                            isDownloading
+                                                ? 'Downloading...'
+                                                : `Download ${selectedFiles.size > 1 ? 'as ZIP' : ''}`
+                                        }
                                     />
                                     <Button
                                         variant="outlined"

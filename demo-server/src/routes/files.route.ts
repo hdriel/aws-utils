@@ -8,6 +8,7 @@ import {
     getFileVersionCtrl,
     toggingFileVersionCtrl,
     uploadSingleFileCtrl,
+    downloadFilesAsZipCtrl,
 } from '../controls/file.control';
 import { logApiMW } from '../middleware/logAPI.mw';
 
@@ -18,6 +19,7 @@ router.use(logApiMW);
 router.post('/content', uploadFileDataCtrl);
 router.post('/upload', uploadSingleFileCtrl);
 
+router.get('/download', downloadFilesAsZipCtrl);
 router.get('/info', getFileInfoCtrl);
 router.get('/data', getFileDataCtrl);
 router.get('/url', getFileUrlCtrl);

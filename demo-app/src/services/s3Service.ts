@@ -16,6 +16,7 @@ interface S3ResponseFile {
 
 class S3Service {
     private api: Axios;
+    private downloadAbortController: AbortController | null = null;
 
     constructor() {
         this.api = axios.create({
@@ -169,6 +170,42 @@ class S3Service {
         }
     }
 
+    async downloadFilesAsZip(filePath: string | string[], filename?: string): Promise<string> {
+        try {
+            if (this.downloadAbortController) {
+                this.downloadAbortController.abort();
+            }
+
+            this.downloadAbortController = new AbortController();
+
+            const query = ([] as string[])
+                .concat(filePath as string[])
+                .map((file: string) => `file=${encodeURIComponent(file)}`)
+                .join('&');
+
+            const encodedFilename = filename ? encodeURIComponent(filename) : undefined;
+            const filenameQueryString = encodedFilename ? `&filename=${encodedFilename}` : '';
+
+            const { data } = await this.api.get(`/files/download?${query}${filenameQueryString}`, {
+                responseType: 'blob',
+                timeout: 600_000, // 10m timeout
+                signal: this.downloadAbortController.signal,
+            });
+
+            // Create a blob URL and trigger download
+            const blob = new Blob([data], { type: 'application/zip' });
+            const url = window.URL.createObjectURL(blob);
+
+            this.downloadAbortController = null;
+
+            return url;
+        } catch (error) {
+            this.downloadAbortController = null;
+            console.error('Failed to generate signed URL:', error);
+            throw error;
+        }
+    }
+
     async getObject(filePath: string): Promise<any> {
         try {
             const query = qs.stringify({ filePath });
@@ -192,6 +229,14 @@ class S3Service {
         } catch (error) {
             console.error('Failed to tag object:', error);
             throw error;
+        }
+    }
+
+    abortDownloadFiles() {
+        if (this.downloadAbortController) {
+            this.downloadAbortController.abort();
+            this.downloadAbortController = null;
+            console.log('Download canceled by user');
         }
     }
 

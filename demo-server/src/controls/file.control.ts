@@ -109,3 +109,20 @@ export const uploadFileDataCtrl = async (req: Request, res: Response, _next: Nex
 
     res.json(result);
 };
+
+export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: NextFunction) => {
+    const s3BucketUtil = getS3BucketUtil();
+    const filePath = ([] as string[])
+        .concat(req.query.file as string[])
+        .filter((v) => v)
+        .map((file) => decodeURIComponent(file));
+
+    if (Array.isArray(filePath)) {
+        const downloadMiddleware = await s3BucketUtil.getStreamZipFileCtr({ filePath });
+        return downloadMiddleware(req, res, next);
+    }
+
+    return res.sendStatus(500);
+
+    // const data = await s3BucketUtil.getObjectStream(filePath);
+};
