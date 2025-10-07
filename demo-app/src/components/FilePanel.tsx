@@ -11,6 +11,7 @@ import {
     Dialog,
     List,
     type ListItemProps,
+    Text,
 } from 'mui-simple';
 
 import { FolderOpen } from '@mui/icons-material';
@@ -376,10 +377,18 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                 ) : (
                     <Box className="empty-state">
                         <FolderOpen className="empty-icon" />
-                        <Typography variant="h6" component="h3">
+                        <Text
+                            variant="h6"
+                            component="h3"
+                            fullWidth
+                            justifyContent="center"
+                            sx={{ display: 'flex !important' }}
+                        >
                             No Files
-                        </Typography>
-                        <Typography variant="body2">Upload files to get started</Typography>
+                        </Text>
+                        <Text variant="body2" fullWidth justifyContent="center" sx={{ display: 'flex !important' }}>
+                            Upload files to get started
+                        </Text>
                     </Box>
                 )}
             </div>

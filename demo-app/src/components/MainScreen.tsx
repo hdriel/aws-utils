@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box } from '@mui/material';
 import { Button, Typography, SVGIcon } from 'mui-simple';
-import { LogoutOutlined, Storage } from '@mui/icons-material';
+import { LogoutOutlined } from '@mui/icons-material';
 import { TreePanel } from './TreePanel';
 import { FilePanel } from './FilePanel';
 import { s3Service } from '../services/s3Service';
