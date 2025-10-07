@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box } from '@mui/material';
 import { Button, Typography, SVGIcon } from 'mui-simple';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
 import { TreePanel } from './TreePanel';
 import { FilePanel } from './FilePanel';
@@ -50,13 +51,20 @@ export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout }) 
             </Box>
 
             <Box className="content">
-                <TreePanel
-                    bucketName={bucketName}
-                    onFolderSelect={setCurrentPath}
-                    onRefresh={handleRefresh}
-                    refreshTrigger={refreshTrigger}
-                />
-                <FilePanel currentPath={currentPath} onRefresh={handleRefresh} />
+                <PanelGroup autoSaveId="example" direction="horizontal" style={{ width: '100%', height: '100%' }}>
+                    <Panel defaultSize={25} minSize={15} style={{ width: '100%', height: '100%' }}>
+                        <TreePanel
+                            bucketName={bucketName}
+                            onFolderSelect={setCurrentPath}
+                            onRefresh={handleRefresh}
+                            refreshTrigger={refreshTrigger}
+                        />
+                    </Panel>
+                    <PanelResizeHandle />
+                    <Panel minSize={50} style={{ width: '100%', height: '100%' }}>
+                        <FilePanel currentPath={currentPath} onRefresh={handleRefresh} />
+                    </Panel>
+                </PanelGroup>
             </Box>
         </div>
     );

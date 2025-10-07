@@ -48,26 +48,49 @@ interface TreeNodeItem extends TreeViewNodeProps {
     children: TreeNodeItem[];
 }
 
-function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
-    const space = ` `.repeat(level + (root.type === 'directory' ? 0 : 1));
-    return root
-        ? {
-              id: uuidv4(),
-              path: root.path,
-              label: (
-                  <Box display="flex" gap={1}>
-                      {space}
-                      <SVGIcon muiIconName={getFileIcon(root.name, root.type === 'directory')} />
-                      <Typography>{root.name}</Typography>
-                  </Box>
-              ) as any,
-              name: root.name,
-              directory: root.type === 'directory',
-              children: ([] as TreeNodeItem[])
-                  .concat(root.children?.map((node) => buildTreeData(node, level + 1) as TreeNodeItem))
-                  .filter((v) => v),
-          }
-        : null;
+function buildTreeData(root: AwsTreeItem, level = 0, isLast = true, prefix = ''): TreeNodeItem | null {
+    if (!root) return null;
+
+    // Build the tree connector lines
+    /*
+        📁 root
+        ├─ 📁 folder1
+        │  ├─ 📄 file1.txt
+        │  └─ 📄 file2.txt
+        ├─ 📁 folder2
+        │  └─ 📄 file3.txt
+        └─ 📄 readme.md
+     */
+    const connector = level === 0 ? '' : isLast ? '└─ ' : '├─ ';
+    const currentPrefix = level === 0 ? '' : prefix + connector;
+    const childPrefix = level === 0 ? '' : prefix + (isLast ? '   ' : '│  ');
+
+    return {
+        id: uuidv4(),
+        path: root.path,
+        label: (
+            <Box display="flex" alignItems="center" gap={1}>
+                <Typography
+                    component="span"
+                    sx={{
+                        fontFamily: 'monospace',
+                        color: 'text.secondary',
+                        whiteSpace: 'pre',
+                        userSelect: 'none',
+                    }}
+                >
+                    {currentPrefix}
+                </Typography>
+                <SVGIcon muiIconName={getFileIcon(root.name, root.type === 'directory')} />
+                <Typography>{root.name}</Typography>
+            </Box>
+        ) as any,
+        name: root.name,
+        directory: root.type === 'directory',
+        children: root.children
+            ?.map((node, index, array) => buildTreeData(node, level + 1, index === array.length - 1, childPrefix))
+            .filter((v) => v) as TreeNodeItem[],
+    };
 }
 
 export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger }) => {
@@ -105,7 +128,10 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
             if (currNode.id === nodeId) {
                 return currNode;
             }
-            stack.push(...currNode.children);
+
+            if (currNode.children?.length) {
+                stack.push(...currNode.children);
+            }
         }
 
         return null;
@@ -247,6 +273,8 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
             <div className="tree-content">
                 <TreeView
+                    collapseIcon={'ExpandMore'}
+                    expandIcon={'ChevronRight'}
                     // expanded={expanded}
                     selected={selected}
                     // onExpanded={(nodeIds: string[]) => {
