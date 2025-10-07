@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { DialogTitle, DialogContent, DialogActions, Box } from '@mui/material';
+import { DialogTitle, Box } from '@mui/material';
 import { TreeView, Button, Typography, InputText, Dialog, TreeViewNodeProps, SVGIcon } from 'mui-simple';
 import { s3Service } from '../services/s3Service';
 import '../styles/treeView.scss';
@@ -260,13 +260,14 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
             <Dialog
                 title="Create New Folder"
-                actions={[
-                    <Button onClick={() => setCreateDialogOpen(false)} label="Cancel" />,
-                    <Button onClick={handleCreateFolder} variant="contained" disabled={loading} label="Create" />,
-                ]}
                 open={createDialogOpen}
                 onClose={() => setCreateDialogOpen(false)}
+                actions={[
+                    { onClick: () => setCreateDialogOpen(false), label: 'Cancel' },
+                    { onClick: handleCreateFolder, label: 'Create', variant: 'contained' },
+                ]}
             >
+                <DialogTitle>Create New Folder</DialogTitle>
                 <InputText
                     autoFocus
                     margin="dense"
@@ -278,17 +279,24 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 />
             </Dialog>
 
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+            <Dialog
+                open={deleteDialogOpen}
+                title="Confirm Delete"
+                onClose={() => setDeleteDialogOpen(false)}
+                actions={[
+                    { onClick: () => setDeleteDialogOpen(false), label: 'Cancel' },
+                    {
+                        onClick: handleDeleteFolder,
+                        label: 'Delete',
+                        variant: 'contained',
+                        color: 'error',
+                        disabled: loading,
+                    },
+                ]}
+            >
                 <DialogTitle>Confirm Delete</DialogTitle>
-                <DialogContent>
-                    <Typography>Are you sure you want to delete this item? This action cannot be undone.</Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleDeleteFolder} variant="contained" color="error" disabled={loading}>
-                        Delete
-                    </Button>
-                </DialogActions>
+                <Typography>Are you sure you want to delete this item?</Typography>
+                <Typography>This action cannot be undone.</Typography>
             </Dialog>
         </div>
     );
