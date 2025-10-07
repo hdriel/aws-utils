@@ -9,6 +9,10 @@
     padding: 16px 24px;
     border-bottom: 1px solid #e2e8f0;
     background-color: #f7fafc;
+    height: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 
     h2 {
       font-size: 16px;
@@ -18,7 +22,7 @@
     }
 
     .current-path {
-      font-size: 13px;
+      font-size: 20px;
       color: #718096;
       font-family: monospace;
     }

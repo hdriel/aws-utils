@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Button, Typography, Box } from '@mui/material';
+import { Box } from '@mui/material';
+import { Button, Typography, SVGIcon } from 'mui-simple';
 import { LogoutOutlined, Storage } from '@mui/icons-material';
 import { TreePanel } from './TreePanel';
 import { FilePanel } from './FilePanel';
@@ -28,25 +29,24 @@ export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout }) 
         <div className="main-screen">
             <Box className="header">
                 <Box className="header-title">
-                    <Storage />
+                    <SVGIcon muiIconName="Storage" color="white" size={30} />
                     <Box>
-                        <Typography variant="h6" component="h1">
+                        <Typography variant="h6" component="h1" color={'#ececec'}>
                             AWS S3 File Explorer
                         </Typography>
-                        <Typography variant="caption" className="bucket-info">
+                        <Typography variant="caption" className="bucket-info" color="grey">
                             Bucket: {bucketName}
                         </Typography>
                     </Box>
                 </Box>
                 <Button
-                    variant="outlined"
+                    variant="contained"
                     color="error"
                     startIcon={<LogoutOutlined />}
                     onClick={handleLogout}
                     className="logout-button"
-                >
-                    Logout
-                </Button>
+                    label="Logout"
+                />
             </Box>
 
             <Box className="content">
