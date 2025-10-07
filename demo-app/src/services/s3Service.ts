@@ -170,7 +170,39 @@ class S3Service {
         }
     }
 
-    async downloadFilesAsZip(filePath: string | string[], filename?: string): Promise<string> {
+    async downloadSingleFile(filePath: string): Promise<[string, string]> {
+        try {
+            if (this.downloadAbortController) {
+                this.downloadAbortController.abort();
+            }
+
+            this.downloadAbortController = new AbortController();
+
+            const query = `file=${encodeURIComponent(filePath)}`;
+            const { data, headers } = await this.api.get(`/files/download?${query}`, {
+                responseType: 'blob',
+                timeout: 600_000, // 10m timeout
+                signal: this.downloadAbortController.signal,
+            });
+
+            const contentDisposition = headers['content-disposition'];
+            const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+            const filename = filenameMatch?.[1] || filePath.split('/').pop() || 'download';
+
+            const blob = new Blob([data]);
+            const url = window.URL.createObjectURL(blob);
+            this.downloadAbortController = null;
+
+            return [url, filename];
+        } catch (error) {
+            this.downloadAbortController = null;
+
+            console.error('Failed to download file:', error);
+            throw error;
+        }
+    }
+
+    async downloadFilesAsZip(filePath: string | string[], filename?: string): Promise<[string, string]> {
         try {
             if (this.downloadAbortController) {
                 this.downloadAbortController.abort();
@@ -198,7 +230,7 @@ class S3Service {
 
             this.downloadAbortController = null;
 
-            return url;
+            return [url, filename || 'download.zip'];
         } catch (error) {
             this.downloadAbortController = null;
             console.error('Failed to generate signed URL:', error);

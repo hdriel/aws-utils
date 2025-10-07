@@ -1,4 +1,5 @@
 import type { Response, Request, NextFunction } from 'express';
+import type { Logger } from 'stack-trace-logger';
 import ms, { type StringValue } from 'ms';
 import http from 'http';
 import https from 'https';
@@ -48,8 +49,6 @@ import {
     DeleteObjectsCommand,
     type DeleteObjectsCommandOutput,
 } from '@aws-sdk/client-s3';
-
-import { logger } from '../utils/logger';
 import { ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
 
@@ -67,9 +66,12 @@ export class S3BucketUtil {
 
     public readonly region: string;
 
+    public readonly logger?: Logger;
+
     public readonly reqId: string | null;
 
     constructor({
+        logger,
         bucket,
         reqId,
         accessKeyId = AWSConfigSharingUtil.accessKeyId,
@@ -78,6 +80,7 @@ export class S3BucketUtil {
         region = AWSConfigSharingUtil.region,
         s3ForcePathStyle = true,
     }: {
+        logger?: Logger;
         bucket: string;
         reqId?: string;
         accessKeyId?: string;
@@ -95,6 +98,7 @@ export class S3BucketUtil {
         this.endpoint = endpoint;
         this.region = region;
         this.bucket = bucket;
+        this.logger = logger;
         this.reqId = reqId ?? null;
 
         const s3ClientParams = {
@@ -138,7 +142,7 @@ export class S3BucketUtil {
             return true;
         } catch (err: any) {
             if (err.name !== 'NotFound' && err.$metadata?.httpStatusCode !== 404) {
-                logger.error(this.reqId, 'Error checking bucket:', err);
+                this.logger?.error(this.reqId, 'Error checking bucket:', err);
                 throw err;
             } else {
                 return false;
@@ -151,7 +155,7 @@ export class S3BucketUtil {
 
         const isExists = await this.isExistsBucket();
         if (isExists) {
-            logger.info(this.reqId, `Bucket already exists.`, { bucketName });
+            this.logger?.info(this.reqId, `Bucket already exists.`, { bucketName });
             return;
         }
 
@@ -187,7 +191,7 @@ export class S3BucketUtil {
             await this.execute<PutBucketPolicyCommandOutput>(command);
         }
 
-        logger.info(this.reqId, `Public bucket created successfully.`, { bucketName });
+        this.logger?.info(this.reqId, `Public bucket created successfully.`, { bucketName });
 
         return data;
     }
@@ -199,7 +203,7 @@ export class S3BucketUtil {
 
         const isExists = await this.isExistsBucket();
         if (isExists) {
-            logger.info(this.reqId, `Bucket already exists.`, { bucketName });
+            this.logger?.info(this.reqId, `Bucket already exists.`, { bucketName });
             return;
         }
 
@@ -211,7 +215,7 @@ export class S3BucketUtil {
         };
 
         const data = await this.execute(new CreateBucketCommand(createParams));
-        logger.info(this.reqId, `Private bucket created successfully.`, { bucketName });
+        this.logger?.info(this.reqId, `Private bucket created successfully.`, { bucketName });
 
         return data;
     }
@@ -224,7 +228,7 @@ export class S3BucketUtil {
 
         const isExists = await this.isExistsBucket();
         if (isExists) {
-            logger.info(this.reqId, `Bucket already exists.`, { bucketName });
+            this.logger?.info(this.reqId, `Bucket already exists.`, { bucketName });
             return;
         }
 
@@ -267,7 +271,7 @@ export class S3BucketUtil {
 
         const isExists = await this.isExistsBucket();
         if (!isExists) {
-            logger.debug(this.reqId, `Bucket not exists.`, { bucketName });
+            this.logger?.debug(this.reqId, `Bucket not exists.`, { bucketName });
             return;
         }
 
@@ -319,7 +323,7 @@ export class S3BucketUtil {
                 totalDeletedCount += deleteResult.Deleted?.length ?? 0;
 
                 if (deleteResult.Errors && deleteResult.Errors.length > 0) {
-                    logger.warn(this.reqId, `Some objects failed to delete`, {
+                    this.logger?.warn(this.reqId, `Some objects failed to delete`, {
                         directoryPath: normalizedPath,
                         errors: deleteResult.Errors,
                     });
@@ -332,7 +336,7 @@ export class S3BucketUtil {
         if (totalDeletedCount === 0) {
             const directoryExists = await this.fileExists(normalizedPath);
             if (!directoryExists) {
-                logger.debug(this.reqId, `Directory not found`, { directoryPath: normalizedPath });
+                this.logger?.debug(this.reqId, `Directory not found`, { directoryPath: normalizedPath });
                 return null;
             }
         }
@@ -347,14 +351,14 @@ export class S3BucketUtil {
             totalDeletedCount++;
         } catch (error: any) {
             if (error.name !== 'NotFound' && error.$metadata?.httpStatusCode !== 404) {
-                logger.warn(this.reqId, `Failed to delete directory marker`, {
+                this.logger?.warn(this.reqId, `Failed to delete directory marker`, {
                     directoryPath: normalizedPath,
                     error,
                 });
             }
         }
 
-        logger.info(this.reqId, `Directory deleted successfully`, {
+        this.logger?.info(this.reqId, `Directory deleted successfully`, {
             directoryPath: normalizedPath,
             deletedCount: totalDeletedCount,
         });
@@ -592,7 +596,7 @@ export class S3BucketUtil {
         return tag?.Value ?? '';
     }
 
-    async generateSignedFileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
+    async fileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
         const expiresInSeconds = typeof expiresIn === 'number' ? expiresIn : ms(expiresIn) / 1000;
 
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: filePath });
@@ -600,6 +604,7 @@ export class S3BucketUtil {
             expiresIn: expiresInSeconds, // is using 3600 it's will expire in 1 hour (default is 900 seconds = 15 minutes)
         });
 
+        this.logger?.info(null, 'generate signed file url', { url, filePath, expiresIn });
         return url;
     }
 
@@ -621,7 +626,7 @@ export class S3BucketUtil {
             }
         } catch (error: any) {
             if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-                logger.warn(this.reqId, 'File not found', { filePath });
+                this.logger?.warn(this.reqId, 'File not found', { filePath });
                 return 0;
             }
             throw error;
@@ -702,7 +707,7 @@ export class S3BucketUtil {
 
     // ##### STREAMING BLOCK ##########################
 
-    async getObjectStream(
+    private async streamObjectFile(
         filePath: string,
         { Range, checkFileExists = true }: { Range?: string; checkFileExists?: boolean } = {}
     ): Promise<Readable | null> {
@@ -726,36 +731,7 @@ export class S3BucketUtil {
         return response.Body as Readable;
     }
 
-    async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
-        return async (_req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const filePaths = ([] as string[]).concat(filePath as string[]);
-            const archive = archiver('zip');
-            const filename = _filename || new Date().toISOString();
-
-            res.setHeader('Content-Type', 'application/zip');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
-            archive.pipe(res as NodeJS.WritableStream);
-
-            for (const filePath of filePaths) {
-                try {
-                    const fileName = filePath.split('/').pop() || filePath;
-                    const stream = await this.getObjectStream(filePath);
-                    if (!stream) {
-                        next(Error(`File not found for zipping archive stream: "${filePath}"`));
-                        return;
-                    }
-
-                    archive.append(stream, { name: fileName });
-                } catch (error) {
-                    logger.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
-                }
-            }
-
-            await archive.finalize();
-        };
-    }
-
-    async streamVideoFile({
+    private async streamVideoFile({
         filePath,
         Range,
         abortSignal,
@@ -798,9 +774,72 @@ export class S3BucketUtil {
                 },
             };
         } catch (error) {
-            logger.warn(this.reqId, 'getS3VideoStream error', { Bucket: this.bucket, filePath, Range, error });
+            this.logger?.warn(this.reqId, 'getS3VideoStream error', { Bucket: this.bucket, filePath, Range, error });
             return null;
         }
+    }
+
+    async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
+        return async (_req: Request & any, res: Response & any, next: NextFunction & any) => {
+            const filePaths = ([] as string[]).concat(filePath as string[]);
+            const archive = archiver('zip');
+            const filename = _filename || new Date().toISOString();
+
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
+            archive.pipe(res as NodeJS.WritableStream);
+
+            for (const filePath of filePaths) {
+                try {
+                    const fileName = filePath.split('/').pop() || filePath;
+                    const stream = await this.streamObjectFile(filePath);
+                    if (!stream) {
+                        next(Error(`File not found for zipping archive stream: "${filePath}"`));
+                        return;
+                    }
+
+                    archive.append(stream, { name: fileName });
+                } catch (error) {
+                    this.logger?.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
+                }
+            }
+
+            await archive.finalize();
+        };
+    }
+
+    async getStreamFileCtrl({ filePath, filename }: { filePath: string; filename?: string }) {
+        return async (_req: Request & any, res: Response & any, next: NextFunction & any) => {
+            try {
+                const isExists = await this.fileExists(filePath);
+                if (!isExists) {
+                    next(Error(`File not found: "${filePath}"`));
+                    return;
+                }
+
+                const stream = await this.streamObjectFile(filePath);
+                if (!stream) {
+                    next(Error(`Failed to get file stream: "${filePath}"`));
+                    return;
+                }
+
+                const fileInfo = await this.fileInfo(filePath);
+                const fileName = filename || filePath.split('/').pop() || 'download';
+
+                res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+                if (fileInfo.ContentLength) {
+                    res.setHeader('Content-Length', String(fileInfo.ContentLength));
+                }
+
+                await pump(stream, res);
+            } catch (error) {
+                this.logger?.error(this.reqId, 'Failed to stream file', { filePath, error });
+                if (!res.headersSent) {
+                    next(error);
+                }
+            }
+        };
     }
 
     async getStreamVideoFileCtrl({
@@ -893,7 +932,7 @@ export class S3BucketUtil {
                 }
 
                 if (!res.headersSent) {
-                    logger.warn(req.id, 'caught exception in stream controller', {
+                    this.logger?.warn(req.id, 'caught exception in stream controller', {
                         error: error?.message ?? String(error),
                         key: fileKey,
                         url: req.originalUrl,

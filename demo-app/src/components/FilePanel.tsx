@@ -122,15 +122,33 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
         s3Service.abortDownloadFiles();
     };
 
+    const handleDownloadViaSignedLink = async () => {
+        if (selectedFiles.size !== 1) return;
+
+        const fileKey = Array.from(selectedFiles)[0];
+        const url = await s3Service.getSignedUrl(fileKey, 5);
+        const fileName = files.find((f) => f.key === fileKey)?.name || 'download';
+        const openInNewTab = isVideoFile(fileKey);
+
+        if (openInNewTab) {
+            // Open in new tab - browser will display video player
+            window.open(url, '_blank');
+
+            // Clean up after some delay (give browser time to load)
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+            }, 1000);
+        } else {
+            await downloadFile(url, fileName);
+        }
+    };
+
     const handleDownload = async () => {
         if (selectedFiles.size === 0) return;
 
         try {
             if (selectedFiles.size === 1) {
-                const fileKey = Array.from(selectedFiles)[0];
-                const url = await s3Service.getSignedUrl(fileKey, 60);
-                const fileName = files.find((f) => f.key === fileKey)?.name || 'download';
-                await downloadFile(url, fileName);
+                await downloadSingleFile();
             } else {
                 await downloadMultipleAsZip();
             }
@@ -141,9 +159,18 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
     const downloadMultipleAsZip = async () => {
         const filePath: string[] = Array.from(selectedFiles).filter((fileKey) => files.find((f) => f.key === fileKey));
-        const url = await s3Service.downloadFilesAsZip(filePath);
+        const [url, filename] = await s3Service.downloadFilesAsZip(filePath, 'aws-s3-bucket-utils-download.zip');
 
-        return downloadFile(url, 'aws-s3-bucket-utils-download.zip');
+        return downloadFile(url, filename);
+    };
+
+    const downloadSingleFile = async () => {
+        const [filePath]: string[] = Array.from(selectedFiles).filter((fileKey) =>
+            files.find((f) => f.key === fileKey)
+        );
+        const [url, filename] = await s3Service.downloadSingleFile(filePath);
+
+        return downloadFile(url, filename);
     };
 
     const handleDelete = async () => {
@@ -317,7 +344,45 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                 <Typography variant="subtitle1" component="h3">
                                     Actions
                                 </Typography>
+
                                 <Box className="actions-grid">
+                                    {selectedFiles.size === 1 && (
+                                        <Button
+                                            variant="outlined"
+                                            startIcon="Download"
+                                            onClick={() => {
+                                                if (isDownloading) {
+                                                    handleAbortDownload();
+                                                } else {
+                                                    setIsDownloading(true);
+                                                    handleDownloadViaSignedLink()
+                                                        .then(() => {
+                                                            console.log('download via link done!');
+                                                        })
+                                                        .finally(() => {
+                                                            setIsDownloading(false);
+                                                        });
+                                                }
+                                            }}
+                                            fullWidth
+                                            color={isDownloading ? 'info' : 'primary'}
+                                            endIcon={
+                                                isDownloading ? (
+                                                    <Box
+                                                        sx={{
+                                                            position: 'absolute',
+                                                            right: '12px',
+                                                            top: '5px',
+                                                            bottom: 0,
+                                                        }}
+                                                    >
+                                                        <CircularProgress color="info" size={15} />
+                                                    </Box>
+                                                ) : null
+                                            }
+                                            label={isDownloading ? 'Downloading...' : `Download via signed link`}
+                                        />
+                                    )}
                                     <Button
                                         variant="outlined"
                                         startIcon="Download"

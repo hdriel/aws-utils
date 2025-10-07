@@ -25,7 +25,7 @@ export const getFileUrlCtrl = async (req: Request, res: Response, _next: NextFun
     const filePath = req.query.filePath as string;
     const expireIn = req.query?.expireIn ? +req.query.expireIn : undefined;
 
-    const result = await s3BucketUtil.generateSignedFileUrl(filePath, expireIn);
+    const result = await s3BucketUtil.fileUrl(filePath, expireIn);
 
     res.json(result);
 };
@@ -112,17 +112,16 @@ export const uploadFileDataCtrl = async (req: Request, res: Response, _next: Nex
 
 export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = ([] as string[])
+    const filePaths = ([] as string[])
         .concat(req.query.file as string[])
         .filter((v) => v)
         .map((file) => decodeURIComponent(file));
 
-    if (Array.isArray(filePath)) {
-        const downloadMiddleware = await s3BucketUtil.getStreamZipFileCtr({ filePath });
+    if (filePaths.length === 1) {
+        const downloadMiddleware = await s3BucketUtil.getStreamFileCtrl({ filePath: filePaths[0] });
         return downloadMiddleware(req, res, next);
     }
 
-    return res.sendStatus(500);
-
-    // const data = await s3BucketUtil.getObjectStream(filePath);
+    const downloadMiddleware = await s3BucketUtil.getStreamZipFileCtr({ filePath: filePaths });
+    return downloadMiddleware(req, res, next);
 };

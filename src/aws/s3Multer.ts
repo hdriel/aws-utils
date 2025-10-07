@@ -1,12 +1,12 @@
 import path from 'pathe';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import type { Logger } from 'stack-trace-logger';
 import multer, { type Multer } from 'multer';
 import multerS3 from 'multer-s3';
 import bytes, { type Unit as BytesUnit } from 'bytes';
 import type { File, FILES3_METADATA } from '../interfaces';
 import { S3BucketUtil } from './s3-bucket';
 import { ACLs } from '../utils/consts';
-import { logger } from '../utils/logger';
 import { AWSConfigSharingUtil } from './configuration';
 
 // prettier-ignore
@@ -66,6 +66,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
     private readonly maxUploadFileSizeRestriction: ByteUnitStringValue;
 
     constructor({
+        logger,
         bucket,
         reqId,
         accessKeyId = AWSConfigSharingUtil.accessKeyId,
@@ -75,6 +76,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
         s3ForcePathStyle = true,
         maxUploadFileSizeRestriction = '10GB',
     }: {
+        logger?: Logger;
         bucket: string;
         reqId?: string;
         accessKeyId?: string;
@@ -85,6 +87,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
         maxUploadFileSizeRestriction?: ByteUnitStringValue;
     }) {
         super({
+            logger,
             bucket,
             reqId,
             accessKeyId,
@@ -121,7 +124,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
         const fileSize = typeof fileSizeUnitValue === 'number' ? fileSizeUnitValue : bytes(fileSizeUnitValue);
 
         if (!fileSize) {
-            logger.warn(this.reqId, 'Failed to convert fileSize restriction, proceeding without limit', {
+            this.logger?.warn(this.reqId, 'Failed to convert fileSize restriction, proceeding without limit', {
                 maxFileSize,
                 maxUploadFileSizeRestriction: this.maxUploadFileSizeRestriction,
             });
@@ -199,13 +202,13 @@ export class S3BucketMulterUtil extends S3BucketUtil {
             const mw: any = upload.single(fieldName);
             mw(req, res, (err: any) => {
                 if (err) {
-                    logger.error(this.reqId, 'Single file upload error', { fieldName, error: err.message });
+                    this.logger?.error(this.reqId, 'Single file upload error', { fieldName, error: err.message });
                     return next(err);
                 }
 
                 if (req.file) {
                     req.s3File = req.file as UploadedS3File;
-                    logger.info(this.reqId, 'Single file uploaded successfully', {
+                    this.logger?.info(this.reqId, 'Single file uploaded successfully', {
                         fieldName,
                         key: req.s3File.key,
                         location: req.s3File.location,
@@ -234,13 +237,13 @@ export class S3BucketMulterUtil extends S3BucketUtil {
             const mw: any = upload.array(fieldName, maxCount);
             mw(req, res, (err: any) => {
                 if (err) {
-                    logger.error(this.reqId, 'Multiple files upload error', { fieldName, error: err.message });
+                    this.logger?.error(this.reqId, 'Multiple files upload error', { fieldName, error: err.message });
                     return next(err);
                 }
 
                 if (req.files && Array.isArray(req.files)) {
                     req.s3Files = req.files as UploadedS3File[];
-                    logger.info(this.reqId, 'Multiple files uploaded successfully', {
+                    this.logger?.info(this.reqId, 'Multiple files uploaded successfully', {
                         fieldName,
                         count: req.s3Files.length,
                         keys: req.s3Files.map((f: any) => f.key),
@@ -282,7 +285,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
             const mw: any = upload.fields(multerFields);
             mw(req, res, (err: any) => {
                 if (err) {
-                    logger.error(this.reqId, 'Fields upload error', { error: err.message });
+                    this.logger?.error(this.reqId, 'Fields upload error', { error: err.message });
                     return next(err);
                 }
 
@@ -295,7 +298,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
                         keys: files.map((f: any) => f.key),
                     }));
 
-                    logger.info(this.reqId, 'Fields uploaded successfully', { uploadSummary });
+                    this.logger?.info(this.reqId, 'Fields uploaded successfully', { uploadSummary });
                 }
 
                 next();
@@ -315,7 +318,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
 
             anyUpload(req, res, (err: any) => {
                 if (err) {
-                    logger.error(this.reqId, 'Any files upload error', { error: err.message });
+                    this.logger?.error(this.reqId, 'Any files upload error', { error: err.message });
                     return next(err);
                 }
 
@@ -326,7 +329,7 @@ export class S3BucketMulterUtil extends S3BucketUtil {
                         return next(new Error(`Too many files uploaded. Maximum is ${maxCount}`));
                     }
 
-                    logger.info(this.reqId, 'Any files uploaded successfully', {
+                    this.logger?.info(this.reqId, 'Any files uploaded successfully', {
                         count: req.s3AllFiles.length,
                         keys: req.s3AllFiles.map((f: any) => f.key),
                     });
