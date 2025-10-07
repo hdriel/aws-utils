@@ -63,8 +63,9 @@ function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
               ) as any,
               name: root.name,
               directory: root.type === 'directory',
-              children:
-                  root.children?.map((node) => buildTreeData(node, level + 1) as TreeNodeItem).filter((v) => v) ?? [],
+              children: ([] as TreeNodeItem[])
+                  .concat(root.children?.map((node) => buildTreeData(node, level + 1) as TreeNodeItem))
+                  .filter((v) => v),
           }
         : null;
 }
