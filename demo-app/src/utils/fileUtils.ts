@@ -36,16 +36,8 @@ const treeItemIcon = {
 
 export const getFileIcon = (filename: string, isDirectory: boolean = false) => {
     if (!filename) return;
-
     if (isDirectory) return treeItemIcon.directory;
-
-    const ext = filename.split('.').pop()?.toLowerCase();
-    switch (ext) {
-        case 'png':
-            return treeItemIcon.image;
-        case 'mp4':
-            return treeItemIcon.video;
-        default:
-            return treeItemIcon.file;
-    }
+    if (isImageFile(filename)) return treeItemIcon.image;
+    if (isVideoFile(filename)) return treeItemIcon.video;
+    return treeItemIcon.file;
 };
