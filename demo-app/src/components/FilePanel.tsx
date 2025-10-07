@@ -377,16 +377,10 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                 ) : (
                     <Box className="empty-state">
                         <FolderOpen className="empty-icon" />
-                        <Text
-                            variant="h6"
-                            component="h3"
-                            fullWidth
-                            justifyContent="center"
-                            sx={{ display: 'flex !important' }}
-                        >
+                        <Text variant="h6" component="h3" fullWidth justifyContent="center">
                             No Files
                         </Text>
-                        <Text variant="body2" fullWidth justifyContent="center" sx={{ display: 'flex !important' }}>
+                        <Text variant="body2" fullWidth justifyContent="center">
                             Upload files to get started
                         </Text>
                     </Box>
