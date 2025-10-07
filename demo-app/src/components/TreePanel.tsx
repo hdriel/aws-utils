@@ -49,7 +49,7 @@ interface TreeNodeItem extends TreeViewNodeProps {
 }
 
 function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
-    const space = `_`.repeat(level + (root.type === 'directory' ? 0 : 1));
+    const space = ` `.repeat(level + (root.type === 'directory' ? 0 : 1));
     return root
         ? {
               id: uuidv4(),
@@ -174,9 +174,12 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
             if (!selectedNode) return;
 
             const basePath = selectedNode?.path === '' ? '' : selectedNode?.path || '';
-            const folderPath = basePath ? `${basePath}/${newFolderName}/` : `${newFolderName}/`;
+            const folderPath = [basePath, newFolderName]
+                .filter((v) => v)
+                .map((p) => p.replace(/\/$/, ''))
+                .join('/');
 
-            await s3Service.createFolder(folderPath);
+            await s3Service.createFolder(`${folderPath}/`);
             setCreateDialogOpen(false);
             setNewFolderName('');
             await loadRootFiles();
