@@ -66,6 +66,7 @@ import type {
     S3UploadOptions,
     UploadedS3File,
 } from '../interfaces';
+export type { UploadedS3File } from '../interfaces';
 import { AWSConfigSharingUtil } from './configuration';
 
 const pump = promisify(pipeline);
@@ -820,13 +821,20 @@ export class S3BucketUtil {
         }
     }
 
+    // ===================================================================
+    // CORRECT SOLUTION: Use Transfer-Encoding: chunked (no Content-Length)
+    // ===================================================================
+
+    // In s3-bucket.ts - Update getStreamZipFileCtr method:
+
     async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const filePaths = ([] as string[]).concat(filePath as string[]);
-            const archive = archiver('zip');
+            const archive = archiver('zip', {
+                zlib: { level: 5 }, // Compression level (0-9, lower = faster)
+            });
             const filename = _filename || new Date().toISOString();
 
-            // Create abort controller for cleanup
             const abort = new AbortController();
             const onClose = () => {
                 abort.abort();
@@ -836,10 +844,40 @@ export class S3BucketUtil {
             req.once('close', onClose);
 
             try {
+                // ✅ Calculate total uncompressed size for progress tracking
+                let totalSize = 0;
+                const fileInfos: Array<{ path: string; size: number; name: string }> = [];
+
+                for (const filePath of filePaths) {
+                    try {
+                        const fileInfo = await this.fileInfo(filePath);
+                        const size = fileInfo.ContentLength || 0;
+                        totalSize += size;
+
+                        fileInfos.push({
+                            path: filePath,
+                            size,
+                            name: filePath.split('/').pop() || filePath,
+                        });
+                    } catch (error) {
+                        this.logger?.warn(this.reqId, 'File not found for size calculation', { filePath });
+                    }
+                }
+
+                // ✅ Set headers WITHOUT Content-Length (use chunked transfer)
                 res.setHeader('Content-Type', 'application/zip');
                 res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
 
-                // Handle archive errors
+                // ✅ Add custom header so client knows uncompressed size
+                res.setHeader('X-Total-Size', String(totalSize));
+                res.setHeader('X-File-Count', String(fileInfos.length));
+
+                // ✅ CRITICAL: Expose custom headers for CORS/browser access
+                res.setHeader('Access-Control-Expose-Headers', 'X-Total-Size, X-File-Count, Content-Disposition');
+
+                // ✅ Don't set Content-Length - let it use chunked encoding
+                // This allows the response size to be determined dynamically
+
                 archive.on('error', (err) => {
                     this.logger?.error(this.reqId, 'Archive error', { error: err });
                     abort.abort();
@@ -850,38 +888,41 @@ export class S3BucketUtil {
 
                 archive.pipe(res as NodeJS.WritableStream);
 
-                for (const filePath of filePaths) {
-                    // Check if request was aborted
-                    if (abort.signal.aborted) {
-                        break;
-                    }
+                // Add files to archive
+                for (const fileInfo of fileInfos) {
+                    if (abort.signal.aborted) break;
 
                     try {
-                        const fileName = filePath.split('/').pop() || filePath;
-                        const stream = await this.streamObjectFile(filePath, {
+                        const stream = await this.streamObjectFile(fileInfo.path, {
                             abortSignal: abort.signal,
                         });
 
                         if (!stream) {
-                            this.logger?.warn(this.reqId, 'File not found for zipping', { filePath });
+                            this.logger?.warn(this.reqId, 'File not found for zipping', {
+                                filePath: fileInfo.path,
+                            });
                             continue;
                         }
 
-                        // Handle stream errors
                         stream.on('error', (err) => {
-                            this.logger?.warn(this.reqId, 'Stream error while zipping', { filePath, error: err });
+                            this.logger?.warn(this.reqId, 'Stream error while zipping', {
+                                filePath: fileInfo.path,
+                                error: err,
+                            });
                             stream.destroy();
                         });
 
-                        archive.append(stream, { name: fileName });
+                        archive.append(stream, { name: fileInfo.name });
                     } catch (error) {
-                        this.logger?.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
+                        this.logger?.warn(this.reqId, 'Failed to add file to zip', {
+                            filePath: fileInfo.path,
+                            error,
+                        });
                     }
                 }
 
                 await archive.finalize();
 
-                // Cleanup on successful completion
                 req.off('close', onClose);
             } catch (error: any) {
                 abort.abort();

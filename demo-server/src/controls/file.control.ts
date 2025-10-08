@@ -117,12 +117,11 @@ export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: 
         .filter((v) => v)
         .map((file) => decodeURIComponent(file));
 
-    if (filePaths.length === 1) {
-        const downloadMiddleware = await s3BucketUtil.getStreamFileCtrl({ filePath: filePaths[0] });
-        return downloadMiddleware(req, res, next);
-    }
+    const downloadMiddleware =
+        filePaths.length === 1
+            ? await s3BucketUtil.getStreamFileCtrl({ filePath: filePaths[0] })
+            : await s3BucketUtil.getStreamZipFileCtr({ filePath: filePaths });
 
-    const downloadMiddleware = await s3BucketUtil.getStreamZipFileCtr({ filePath: filePaths });
     return downloadMiddleware(req, res, next);
 };
 
