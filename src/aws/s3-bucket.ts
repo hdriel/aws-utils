@@ -840,43 +840,80 @@ export class S3BucketUtil {
             req.once('close', onClose);
 
             try {
-                // ✅ STEP 1: Create temporary archive to measure actual size
-                this.logger?.info(this.reqId, 'Calculating zip size...', { fileCount: filePaths.length });
+                this.logger?.info(this.reqId, 'Starting parallel file download...', { fileCount: filePaths.length });
 
-                const measureArchive = archiver('zip', { zlib: { level: 5 } });
-                let actualZipSize = 0;
-
-                // Measure the size without sending
-                measureArchive.on('data', (chunk: Buffer) => {
-                    actualZipSize += chunk.length;
-                });
-
-                const fileInfos: Array<{ path: string; name: string }> = [];
-
-                // Add files to measure archive
-                for (const filePath of filePaths) {
-                    if (abort.signal.aborted) break;
-
+                // ✅ STEP 1: Download ALL files in parallel and buffer in memory
+                const downloadPromises = filePaths.map(async (filePath) => {
                     try {
+                        if (abort.signal.aborted) return null;
+
                         const stream = await this.streamObjectFile(filePath, {
                             abortSignal: abort.signal,
                         });
 
                         if (!stream) {
                             this.logger?.warn(this.reqId, 'File not found', { filePath });
-                            continue;
+                            return null;
                         }
 
-                        const fileName = filePath.split('/').pop() || filePath;
-                        fileInfos.push({ path: filePath, name: fileName });
+                        // Convert stream to buffer
+                        const chunks: Buffer[] = [];
+                        for await (const chunk of stream) {
+                            if (abort.signal.aborted) {
+                                stream.destroy();
+                                return null;
+                            }
+                            chunks.push(Buffer.from(chunk));
+                        }
 
-                        measureArchive.append(stream, { name: fileName });
+                        const buffer = Buffer.concat(chunks);
+                        const fileName = filePath.split('/').pop() || filePath;
+
+                        this.logger?.debug(this.reqId, 'File downloaded', {
+                            filePath,
+                            size: buffer.length,
+                        });
+
+                        return {
+                            name: fileName,
+                            buffer,
+                            path: filePath,
+                        };
                     } catch (error) {
-                        this.logger?.warn(this.reqId, 'Failed to measure file', { filePath, error });
+                        this.logger?.warn(this.reqId, 'Failed to download file', { filePath, error });
+                        return null;
                     }
+                });
+
+                // Wait for all downloads to complete
+                const fileBuffers = (await Promise.all(downloadPromises)).filter(Boolean);
+
+                if (abort.signal.aborted || fileBuffers.length === 0) {
+                    req.off('close', onClose);
+                    if (fileBuffers.length === 0) {
+                        next(new Error('No files available to zip'));
+                    }
+                    return;
                 }
 
-                // Wait for measurement to complete
+                this.logger?.info(this.reqId, 'All files downloaded, creating zip...', {
+                    fileCount: fileBuffers.length,
+                });
+
+                // ✅ STEP 2: Create zip from buffered files and measure size
+                const measureArchive = archiver('zip', { zlib: { level: 5 } });
+                let actualZipSize = 0;
+
+                measureArchive.on('data', (chunk: Buffer) => {
+                    actualZipSize += chunk.length;
+                });
+
+                // Add all buffered files
+                for (const file of fileBuffers) {
+                    if (abort.signal.aborted) break;
+                    measureArchive.append(file!.buffer, { name: file!.name });
+                }
+
                 await measureArchive.finalize();
 
                 if (abort.signal.aborted) {
@@ -889,12 +926,12 @@ export class S3BucketUtil {
                     sizeMB: (actualZipSize / (1024 * 1024)).toFixed(2),
                 });
 
-                // ✅ STEP 2: Now stream the actual zip with known Content-Length
+                // ✅ STEP 3: Stream the actual zip with known Content-Length
                 const actualArchive = archiver('zip', { zlib: { level: 5 } });
 
                 res.setHeader('Content-Type', 'application/zip');
                 res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
-                res.setHeader('Content-Length', String(actualZipSize)); // ✅ Exact size!
+                res.setHeader('Content-Length', String(actualZipSize));
                 res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Content-Disposition, Content-Length');
 
                 actualArchive.on('error', (err) => {
@@ -907,40 +944,18 @@ export class S3BucketUtil {
 
                 actualArchive.pipe(res as NodeJS.WritableStream);
 
-                // Re-add all files
-                for (const fileInfo of fileInfos) {
+                // Re-add all files from buffers (instant - no S3 calls)
+                for (const file of fileBuffers) {
                     if (abort.signal.aborted) break;
-
-                    try {
-                        const stream = await this.streamObjectFile(fileInfo.path, {
-                            abortSignal: abort.signal,
-                        });
-
-                        if (!stream) {
-                            this.logger?.warn(this.reqId, 'File not found for zipping', {
-                                filePath: fileInfo.path,
-                            });
-                            continue;
-                        }
-
-                        stream.on('error', (err) => {
-                            this.logger?.warn(this.reqId, 'Stream error while zipping', {
-                                filePath: fileInfo.path,
-                                error: err,
-                            });
-                            stream.destroy();
-                        });
-
-                        actualArchive.append(stream, { name: fileInfo.name });
-                    } catch (error) {
-                        this.logger?.warn(this.reqId, 'Failed to add file to zip', {
-                            filePath: fileInfo.path,
-                            error,
-                        });
-                    }
+                    actualArchive.append(file!.buffer, { name: file!.name });
                 }
 
                 await actualArchive.finalize();
+
+                this.logger?.info(this.reqId, 'Zip download completed', {
+                    fileCount: fileBuffers.length,
+                    totalSize: actualZipSize,
+                });
 
                 req.off('close', onClose);
             } catch (error: any) {
