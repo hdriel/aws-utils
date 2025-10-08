@@ -39,7 +39,6 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     const [tempLink, setTempLink] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [videoPreviewUrl, setVideoPreviewUrl] = useState('');
-    const [videoPrivateUrl, setVideoPrivateUrl] = useState('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -77,20 +76,8 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
         } else {
             newSelected.add(fileKey);
         }
-        setSelectedFiles(newSelected);
 
-        if (newSelected.size === 1) {
-            const file = files.find((f) => f.key === fileKey);
-            if (file && isVideoFile(file.name)) {
-                const url = `${import.meta.env.VITE_SERVER_URL}/files/stream?file=${encodeURIComponent(file.name)}`;
-                console.log('setVideoPrivateUrl', url);
-                setVideoPrivateUrl(url);
-            } else {
-                setVideoPreviewUrl('');
-            }
-        } else {
-            setVideoPreviewUrl('');
-        }
+        setSelectedFiles(newSelected);
     };
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,6 +225,13 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     const copyToClipboard = () => {
         navigator.clipboard.writeText(tempLink);
     };
+
+    const fileKey = Array.from(selectedFiles)[0];
+    const file = files?.find((f) => f.key === fileKey);
+    const videoPrivateUrl =
+        selectedFiles.size === 1 && file && isVideoFile(file.name)
+            ? `${import.meta.env.VITE_SERVER_URL}/files/stream?file=${encodeURIComponent(file.key)}`
+            : null;
 
     return (
         <div className="file-panel">
