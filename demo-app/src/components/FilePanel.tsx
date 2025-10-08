@@ -39,6 +39,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     const [tempLink, setTempLink] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [videoPreviewUrl, setVideoPreviewUrl] = useState('');
+    const [videoPrivateUrl, setVideoPrivateUrl] = useState('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +78,19 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
             newSelected.add(fileKey);
         }
         setSelectedFiles(newSelected);
+
+        if (newSelected.size === 1) {
+            const file = files.find((f) => f.key === fileKey);
+            if (file && isVideoFile(file.name)) {
+                const url = `${import.meta.env.VITE_SERVER_URL}/files/stream?file=${encodeURIComponent(file.name)}`;
+                console.log('setVideoPrivateUrl', url);
+                setVideoPrivateUrl(url);
+            } else {
+                setVideoPreviewUrl('');
+            }
+        } else {
+            setVideoPreviewUrl('');
+        }
     };
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -446,6 +460,14 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                         </>
                                     )}
                                 </Box>
+
+                                {videoPrivateUrl && (
+                                    <Box className="video-preview">
+                                        <video controls src={videoPrivateUrl}>
+                                            Your browser does not support the video tag.
+                                        </video>
+                                    </Box>
+                                )}
                             </Box>
                         )}
                     </>

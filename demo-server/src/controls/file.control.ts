@@ -125,3 +125,15 @@ export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: 
     const downloadMiddleware = await s3BucketUtil.getStreamZipFileCtr({ filePath: filePaths });
     return downloadMiddleware(req, res, next);
 };
+
+export const streamVideoFilesCtrl = async (req: Request, res: Response, next: NextFunction) => {
+    const s3BucketUtil = getS3BucketUtil();
+    const fileKey = req.query.file && decodeURIComponent(req.query.file as string);
+
+    if (!fileKey) {
+        return res.status(400).json({ error: 'file is required' });
+    }
+
+    const downloadMiddleware = await s3BucketUtil.getStreamVideoFileCtrl({ fileKey });
+    return downloadMiddleware(req, res, next);
+};

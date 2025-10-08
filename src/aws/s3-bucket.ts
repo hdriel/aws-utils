@@ -57,6 +57,21 @@ import { AWSConfigSharingUtil } from './configuration';
 
 const pump = promisify(pipeline);
 
+const parseRangeHeader = (range: string | undefined, contentLength: number, chunkSize: number) => {
+    if (!range || !range.startsWith('bytes=')) return null;
+    const rangeParts = range.replace('bytes=', '').split('-');
+    const start = parseInt(rangeParts[0], 10);
+    let end = parseInt(rangeParts[1], 10);
+    end = end || start + chunkSize - 1;
+
+    if (isNaN(start) || start < 0 || start >= contentLength) return null;
+    if (isNaN(end) || end < start || end >= contentLength) {
+        return [start, contentLength - 1];
+    }
+
+    return [start, Math.min(end, end)];
+};
+
 export class S3BucketUtil {
     public readonly s3Client: S3Client;
 
@@ -842,18 +857,56 @@ export class S3BucketUtil {
         };
     }
 
+    private getVideoRangeMW({ size, bufferMB = 5 }: { size: number; bufferMB?: number }) {
+        return (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            try {
+                if (req.method === 'HEAD') {
+                    res.statusCode = 200;
+                    res.setHeader('accept-ranges', 'bytes');
+                    res.setHeader('content-length', size);
+                    res.end();
+                    return;
+                }
+
+                const bss = +(req.query.bufferStreamingSizeInMB ?? 0);
+                const bufferSize = bss > 0 && bss <= 50 ? bss : (bufferMB ?? 5);
+                const CHUNK_SIZE = 10 ** 6 * bufferSize;
+
+                const rangeValues = parseRangeHeader(req.headers.range, size, CHUNK_SIZE);
+                let [start, end] = rangeValues || [];
+                if (!rangeValues || start < 0 || start >= size || end < 0 || end >= size || start > end) {
+                    res.status(416).send('Requested Range Not Satisfiable');
+                    return;
+                }
+
+                res.statusCode = 206;
+                const chunkLength = end - start + 1;
+                res.setHeader('content-length', chunkLength);
+                res.setHeader('content-range', `bytes ${start}-${end}/${size}`);
+                res.setHeader('accept-ranges', 'bytes');
+
+                res.setHeader('content-type', 'video/mp4');
+                res.locals.S3Range = `bytes=${start}-${end}`;
+
+                next();
+            } catch (error) {
+                next(error);
+            }
+        };
+    }
+
     async getStreamVideoFileCtrl({
         contentType = 'video/mp4',
         fileKey,
-        Range,
         allowedWhitelist,
         streamTimeoutMS = 30_000,
+        bufferMB,
     }: {
         contentType?: string;
         fileKey: string;
         allowedWhitelist?: string[];
-        Range?: string | undefined;
-        streamTimeoutMS: number | undefined;
+        bufferMB?: number | undefined;
+        streamTimeoutMS?: number | undefined;
     }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const filePath = fileKey;
@@ -864,93 +917,103 @@ export class S3BucketUtil {
                 return;
             }
 
-            if (req.method === 'HEAD') {
-                res.setHeader('Content-Type', contentType);
-                res.setHeader('Accept-Ranges', 'bytes');
-                if (fileSize) res.setHeader('Content-Length', String(fileSize));
-                return res.status(200).end();
-            }
-
-            const abort = new AbortController();
-            const onClose = () => abort.abort();
-            req.once('close', onClose);
-
-            try {
-                const result = await this.streamVideoFile({ filePath, Range, abortSignal: abort.signal });
-                const { body, meta } = result as any;
-
-                const origin = Array.isArray(allowedWhitelist)
-                    ? allowedWhitelist.includes(req.headers.origin ?? '')
-                        ? req.headers.origin!
-                        : undefined
-                    : allowedWhitelist;
-                if (origin) {
-                    res.setHeader('Access-Control-Allow-Origin', origin);
-                    res.setHeader('Vary', 'Origin');
-                }
-
-                const finalContentType = contentType.startsWith('video/') ? contentType : `video/${contentType}`;
-                res.setHeader('Content-Type', meta.contentType ?? finalContentType);
-                res.setHeader('Accept-Ranges', meta.acceptRanges ?? 'bytes');
-
-                if (Range && meta.contentRange) {
-                    res.status(206);
-                    res.setHeader('Content-Range', meta.contentRange);
-                    if (typeof meta.contentLength === 'number') {
-                        res.setHeader('Content-Length', String(meta.contentLength));
-                    }
-                } else if (fileSize) {
-                    res.setHeader('Content-Length', String(fileSize));
-                }
-
-                if (meta.etag) res.setHeader('ETag', meta.etag);
-                if (meta.lastModified) res.setHeader('Last-Modified', meta.lastModified.toUTCString());
-
-                const timeout = setTimeout(() => {
-                    abort.abort();
-                    if (!res.headersSent) res.status(504);
-                    res.end();
-                }, streamTimeoutMS);
-
-                res.once('close', () => {
-                    clearTimeout(timeout);
-                    body.destroy?.();
-                    req.off('close', onClose);
-                });
-
-                await pump(body, res);
-
-                clearTimeout(timeout);
-            } catch (error: any) {
-                const isBenignStreamError =
-                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
-                    error?.name === 'AbortError' ||
-                    error?.code === 'ECONNRESET';
-
-                if (isBenignStreamError) {
+            const nextCB = async (err?: any) => {
+                if (err) {
+                    next(err);
                     return;
                 }
 
-                if (!res.headersSent) {
-                    this.logger?.warn(req.id, 'caught exception in stream controller', {
-                        error: error?.message ?? String(error),
-                        key: fileKey,
-                        url: req.originalUrl,
-                        userId: req.user?._id,
+                if (req.method === 'HEAD') {
+                    res.setHeader('Content-Type', contentType);
+                    res.setHeader('Accept-Ranges', 'bytes');
+                    if (fileSize) res.setHeader('Content-Length', String(fileSize));
+                    return res.status(200).end();
+                }
+
+                const abort = new AbortController();
+                const onClose = () => abort.abort();
+                req.once('close', onClose);
+
+                try {
+                    const Range = res.locals.S3Range;
+                    const result = await this.streamVideoFile({ filePath, Range, abortSignal: abort.signal });
+                    const { body, meta } = result as any;
+
+                    const origin = Array.isArray(allowedWhitelist)
+                        ? allowedWhitelist.includes(req.headers.origin ?? '')
+                            ? req.headers.origin!
+                            : undefined
+                        : allowedWhitelist;
+                    if (origin) {
+                        res.setHeader('Access-Control-Allow-Origin', origin);
+                        res.setHeader('Vary', 'Origin');
+                    }
+
+                    const finalContentType = contentType.startsWith('video/') ? contentType : `video/${contentType}`;
+                    res.setHeader('Content-Type', meta.contentType ?? finalContentType);
+                    res.setHeader('Accept-Ranges', meta.acceptRanges ?? 'bytes');
+
+                    if (Range && meta.contentRange) {
+                        res.status(206);
+                        res.setHeader('Content-Range', meta.contentRange);
+                        if (typeof meta.contentLength === 'number') {
+                            res.setHeader('Content-Length', String(meta.contentLength));
+                        }
+                    } else if (fileSize) {
+                        res.setHeader('Content-Length', String(fileSize));
+                    }
+
+                    if (meta.etag) res.setHeader('ETag', meta.etag);
+                    if (meta.lastModified) res.setHeader('Last-Modified', meta.lastModified.toUTCString());
+
+                    const timeout = setTimeout(() => {
+                        abort.abort();
+                        if (!res.headersSent) res.status(504);
+                        res.end();
+                    }, streamTimeoutMS);
+
+                    res.once('close', () => {
+                        clearTimeout(timeout);
+                        body.destroy?.();
+                        req.off('close', onClose);
                     });
 
-                    next(error);
+                    await pump(body, res);
+
+                    clearTimeout(timeout);
+                } catch (error: any) {
+                    const isBenignStreamError =
+                        error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+                        error?.name === 'AbortError' ||
+                        error?.code === 'ECONNRESET';
+
+                    if (isBenignStreamError) {
+                        return;
+                    }
+
+                    if (!res.headersSent) {
+                        this.logger?.warn(req.id, 'caught exception in stream controller', {
+                            error: error?.message ?? String(error),
+                            key: fileKey,
+                            url: req.originalUrl,
+                            userId: req.user?._id,
+                        });
+
+                        next(error);
+                        return;
+                    }
+
+                    if (!res.writableEnded) {
+                        try {
+                            res.end();
+                        } catch {}
+                    }
+
                     return;
                 }
+            };
 
-                if (!res.writableEnded) {
-                    try {
-                        res.end();
-                    } catch {}
-                }
-
-                return;
-            }
+            this.getVideoRangeMW({ size: fileSize, bufferMB })(req, res, nextCB);
         };
     }
 }
