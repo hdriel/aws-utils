@@ -830,55 +830,74 @@ export class S3BucketUtil {
     async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const filePaths = ([] as string[]).concat(filePath as string[]);
-            const archive = archiver('zip', {
-                zlib: { level: 5 }, // Compression level (0-9, lower = faster)
-            });
             const filename = _filename || new Date().toISOString();
 
             const abort = new AbortController();
             const onClose = () => {
                 abort.abort();
-                archive.destroy();
             };
 
             req.once('close', onClose);
 
             try {
-                // ✅ Calculate total uncompressed size for progress tracking
-                let totalSize = 0;
-                const fileInfos: Array<{ path: string; size: number; name: string }> = [];
+                // ✅ STEP 1: Create temporary archive to measure actual size
+                this.logger?.info(this.reqId, 'Calculating zip size...', { fileCount: filePaths.length });
 
+                const measureArchive = archiver('zip', { zlib: { level: 5 } });
+                let actualZipSize = 0;
+
+                // Measure the size without sending
+                measureArchive.on('data', (chunk: Buffer) => {
+                    actualZipSize += chunk.length;
+                });
+
+                const fileInfos: Array<{ path: string; name: string }> = [];
+
+                // Add files to measure archive
                 for (const filePath of filePaths) {
-                    try {
-                        const fileInfo = await this.fileInfo(filePath);
-                        const size = fileInfo.ContentLength || 0;
-                        totalSize += size;
+                    if (abort.signal.aborted) break;
 
-                        fileInfos.push({
-                            path: filePath,
-                            size,
-                            name: filePath.split('/').pop() || filePath,
+                    try {
+                        const stream = await this.streamObjectFile(filePath, {
+                            abortSignal: abort.signal,
                         });
+
+                        if (!stream) {
+                            this.logger?.warn(this.reqId, 'File not found', { filePath });
+                            continue;
+                        }
+
+                        const fileName = filePath.split('/').pop() || filePath;
+                        fileInfos.push({ path: filePath, name: fileName });
+
+                        measureArchive.append(stream, { name: fileName });
                     } catch (error) {
-                        this.logger?.warn(this.reqId, 'File not found for size calculation', { filePath });
+                        this.logger?.warn(this.reqId, 'Failed to measure file', { filePath, error });
                     }
                 }
 
-                // ✅ Set headers WITHOUT Content-Length (use chunked transfer)
+                // Wait for measurement to complete
+                await measureArchive.finalize();
+
+                if (abort.signal.aborted) {
+                    req.off('close', onClose);
+                    return;
+                }
+
+                this.logger?.info(this.reqId, 'Zip size calculated', {
+                    size: actualZipSize,
+                    sizeMB: (actualZipSize / (1024 * 1024)).toFixed(2),
+                });
+
+                // ✅ STEP 2: Now stream the actual zip with known Content-Length
+                const actualArchive = archiver('zip', { zlib: { level: 5 } });
+
                 res.setHeader('Content-Type', 'application/zip');
                 res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
+                res.setHeader('Content-Length', String(actualZipSize)); // ✅ Exact size!
+                res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Content-Disposition, Content-Length');
 
-                // ✅ Add custom header so client knows uncompressed size
-                res.setHeader('X-Total-Size', String(totalSize));
-                res.setHeader('X-File-Count', String(fileInfos.length));
-
-                // ✅ CRITICAL: Expose custom headers for CORS/browser access
-                res.setHeader('Access-Control-Expose-Headers', 'X-Total-Size, X-File-Count, Content-Disposition');
-
-                // ✅ Don't set Content-Length - let it use chunked encoding
-                // This allows the response size to be determined dynamically
-
-                archive.on('error', (err) => {
+                actualArchive.on('error', (err) => {
                     this.logger?.error(this.reqId, 'Archive error', { error: err });
                     abort.abort();
                     if (!res.headersSent) {
@@ -886,9 +905,9 @@ export class S3BucketUtil {
                     }
                 });
 
-                archive.pipe(res as NodeJS.WritableStream);
+                actualArchive.pipe(res as NodeJS.WritableStream);
 
-                // Add files to archive
+                // Re-add all files
                 for (const fileInfo of fileInfos) {
                     if (abort.signal.aborted) break;
 
@@ -912,7 +931,7 @@ export class S3BucketUtil {
                             stream.destroy();
                         });
 
-                        archive.append(stream, { name: fileInfo.name });
+                        actualArchive.append(stream, { name: fileInfo.name });
                     } catch (error) {
                         this.logger?.warn(this.reqId, 'Failed to add file to zip', {
                             filePath: fileInfo.path,
@@ -921,12 +940,11 @@ export class S3BucketUtil {
                     }
                 }
 
-                await archive.finalize();
+                await actualArchive.finalize();
 
                 req.off('close', onClose);
             } catch (error: any) {
                 abort.abort();
-                archive.destroy();
 
                 const isBenignError =
                     error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||

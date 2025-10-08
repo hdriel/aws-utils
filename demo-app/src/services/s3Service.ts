@@ -229,7 +229,6 @@ class S3Service {
 
             const encodedFilename = filename ? encodeURIComponent(filename) : undefined;
             const filenameQueryString = encodedFilename ? `&filename=${encodedFilename}` : '';
-            let estimatedTotal = 0;
 
             const { data } = await this.api.get(`/files/download?${query}${filenameQueryString}`, {
                 responseType: 'blob',
@@ -237,32 +236,15 @@ class S3Service {
                 signal: this.downloadAbortController.signal,
                 onDownloadProgress: onProgress
                     ? (progressEvent: any) => {
-                          // Try to get custom header on first event
-                          if (estimatedTotal === 0 && progressEvent.event?.target) {
-                              const sizeHeader = progressEvent.event.target.getResponseHeader('X-Total-Size');
-                              estimatedTotal = parseInt(sizeHeader || '0', 10);
-                          }
-
+                          // ✅ Now Content-Length is accurate!
                           if (progressEvent.total && progressEvent.total > 0) {
-                              // ✅ Standard progress (if Content-Length exists)
                               const percentage = (progressEvent.loaded / progressEvent.total) * 100;
                               onProgress(Math.min(percentage, 100));
-                          } else if (estimatedTotal > 0) {
-                              // ✅ Use uncompressed size as estimate (will go over 100%)
-                              // Assume ~50% compression ratio for zip
-                              const estimatedCompressedSize = estimatedTotal * 0.6;
-                              const percentage = Math.min(
-                                  (progressEvent.loaded / estimatedCompressedSize) * 100,
-                                  99 // Cap at 99% until complete
-                              );
-                              onProgress(percentage);
                           } else {
-                              // ✅ Indeterminate progress - just show bytes
+                              // Fallback for chunked encoding
                               const mb = (progressEvent.loaded / (1024 * 1024)).toFixed(2);
                               console.log(`Downloaded: ${mb} MB`);
-                              // You could still call onProgress with a fake percentage
-                              // to show "something is happening"
-                              onProgress(50); // Show 50% as "in progress"
+                              onProgress(50); // Indeterminate
                           }
                       }
                     : undefined,
