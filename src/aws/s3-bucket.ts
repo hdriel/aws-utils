@@ -724,7 +724,15 @@ export class S3BucketUtil {
 
     private async streamObjectFile(
         filePath: string,
-        { Range, checkFileExists = true }: { Range?: string; checkFileExists?: boolean } = {}
+        {
+            Range,
+            checkFileExists = true,
+            abortSignal,
+        }: {
+            Range?: string;
+            checkFileExists?: boolean;
+            abortSignal?: AbortSignal;
+        } = {}
     ): Promise<Readable | null> {
         if (checkFileExists) {
             const isExists = await this.fileExists(filePath);
@@ -737,7 +745,7 @@ export class S3BucketUtil {
             ...(Range ? { Range } : {}),
         });
 
-        const response = await this.execute<GetObjectCommandOutput>(command);
+        const response = await this.execute<GetObjectCommandOutput>(command, { abortSignal });
 
         if (!response.Body || !(response.Body instanceof Readable)) {
             throw new Error('Invalid response body: not a Readable stream');
@@ -795,45 +803,121 @@ export class S3BucketUtil {
     }
 
     async getStreamZipFileCtr({ filePath, filename: _filename }: { filePath: string | string[]; filename?: string }) {
-        return async (_req: Request & any, res: Response & any, next: NextFunction & any) => {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const filePaths = ([] as string[]).concat(filePath as string[]);
             const archive = archiver('zip');
             const filename = _filename || new Date().toISOString();
 
-            res.setHeader('Content-Type', 'application/zip');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
-            archive.pipe(res as NodeJS.WritableStream);
+            // Create abort controller for cleanup
+            const abort = new AbortController();
+            const onClose = () => {
+                abort.abort();
+                archive.destroy();
+            };
 
-            for (const filePath of filePaths) {
-                try {
-                    const fileName = filePath.split('/').pop() || filePath;
-                    const stream = await this.streamObjectFile(filePath);
-                    if (!stream) {
-                        next(Error(`File not found for zipping archive stream: "${filePath}"`));
-                        return;
+            req.once('close', onClose);
+
+            try {
+                res.setHeader('Content-Type', 'application/zip');
+                res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
+
+                // Handle archive errors
+                archive.on('error', (err) => {
+                    this.logger?.error(this.reqId, 'Archive error', { error: err });
+                    abort.abort();
+                    if (!res.headersSent) {
+                        next(err);
+                    }
+                });
+
+                archive.pipe(res as NodeJS.WritableStream);
+
+                for (const filePath of filePaths) {
+                    // Check if request was aborted
+                    if (abort.signal.aborted) {
+                        break;
                     }
 
-                    archive.append(stream, { name: fileName });
-                } catch (error) {
-                    this.logger?.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
-                }
-            }
+                    try {
+                        const fileName = filePath.split('/').pop() || filePath;
+                        const stream = await this.streamObjectFile(filePath, {
+                            abortSignal: abort.signal,
+                        });
 
-            await archive.finalize();
+                        if (!stream) {
+                            this.logger?.warn(this.reqId, 'File not found for zipping', { filePath });
+                            continue;
+                        }
+
+                        // Handle stream errors
+                        stream.on('error', (err) => {
+                            this.logger?.warn(this.reqId, 'Stream error while zipping', { filePath, error: err });
+                            stream.destroy();
+                        });
+
+                        archive.append(stream, { name: fileName });
+                    } catch (error) {
+                        this.logger?.warn(this.reqId, 'Failed to add file to zip', { filePath, error });
+                    }
+                }
+
+                await archive.finalize();
+
+                // Cleanup on successful completion
+                req.off('close', onClose);
+            } catch (error: any) {
+                abort.abort();
+                archive.destroy();
+
+                const isBenignError =
+                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+                    error?.name === 'AbortError' ||
+                    error?.code === 'ECONNRESET';
+
+                if (isBenignError) {
+                    return;
+                }
+
+                if (!res.headersSent) {
+                    this.logger?.error(this.reqId, 'Failed to create zip archive', { error });
+                    next(error);
+                } else if (!res.writableEnded) {
+                    try {
+                        res.end();
+                    } catch {}
+                }
+            } finally {
+                req.off('close', onClose);
+            }
         };
     }
 
     async getStreamFileCtrl({ filePath, filename }: { filePath: string; filename?: string }) {
-        return async (_req: Request & any, res: Response & any, next: NextFunction & any) => {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            const abort = new AbortController();
+            let stream: Readable | null = null;
+
+            const onClose = () => {
+                abort.abort();
+                stream?.destroy?.();
+            };
+
+            req.once('close', onClose);
+
             try {
                 const isExists = await this.fileExists(filePath);
                 if (!isExists) {
+                    req.off('close', onClose);
                     next(Error(`File not found: "${filePath}"`));
                     return;
                 }
 
-                const stream = await this.streamObjectFile(filePath);
+                stream = await this.streamObjectFile(filePath, {
+                    abortSignal: abort.signal,
+                });
+
                 if (!stream) {
+                    req.off('close', onClose);
                     next(Error(`Failed to get file stream: "${filePath}"`));
                     return;
                 }
@@ -847,12 +931,46 @@ export class S3BucketUtil {
                     res.setHeader('Content-Length', String(fileInfo.ContentLength));
                 }
 
+                stream.on('error', (err) => {
+                    this.logger?.warn(this.reqId, 'Stream error', { filePath, error: err });
+                    abort.abort();
+                    stream?.destroy?.();
+                });
+
+                res.once('close', () => {
+                    stream?.destroy?.();
+                    req.off('close', onClose);
+                });
+
                 await pump(stream, res);
-            } catch (error) {
+
+                req.off('close', onClose);
+            } catch (error: any) {
+                abort.abort();
+                if (stream) {
+                    stream.destroy?.();
+                }
+
+                const isBenignStreamError =
+                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+                    error?.name === 'AbortError' ||
+                    error?.code === 'ECONNRESET';
+
+                if (isBenignStreamError) {
+                    return;
+                }
+
                 this.logger?.error(this.reqId, 'Failed to stream file', { filePath, error });
+
                 if (!res.headersSent) {
                     next(error);
+                } else if (!res.writableEnded) {
+                    try {
+                        res.end();
+                    } catch {}
                 }
+            } finally {
+                req.off('close', onClose);
             }
         };
     }
@@ -883,11 +1001,10 @@ export class S3BucketUtil {
 
             try {
                 if (req.method === 'HEAD') {
-                    res.statusCode = 200;
-                    res.setHeader('accept-ranges', 'bytes');
-                    res.setHeader('content-length', fileSize);
-                    res.end();
-                    return;
+                    res.setHeader('Content-Type', contentType);
+                    res.setHeader('Accept-Ranges', 'bytes');
+                    if (fileSize) res.setHeader('Content-Length', String(fileSize));
+                    return res.status(200).end();
                 }
 
                 // const bss = +(req.query.bufferStreamingSizeInMB ?? 0);
@@ -904,22 +1021,15 @@ export class S3BucketUtil {
 
                 res.statusCode = 206;
                 const chunkLength = end - start + 1;
-                res.setHeader('content-length', chunkLength);
-                res.setHeader('content-range', `bytes ${start}-${end}/${fileSize}`);
-                res.setHeader('accept-ranges', 'bytes');
+                res.setHeader('Content-Length', chunkLength);
+                res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+                res.setHeader('Accept-Ranges', 'bytes');
 
-                res.setHeader('content-type', 'video/mp4');
+                res.setHeader('Content-Type', 'video/mp4');
                 Range = `bytes=${start}-${end}`;
             } catch (error) {
                 next(error);
                 return;
-            }
-
-            if (req.method === 'HEAD') {
-                res.setHeader('Content-Type', contentType);
-                res.setHeader('Accept-Ranges', 'bytes');
-                if (fileSize) res.setHeader('Content-Length', String(fileSize));
-                return res.status(200).end();
             }
 
             const abort = new AbortController();
