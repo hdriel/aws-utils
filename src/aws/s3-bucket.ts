@@ -1,6 +1,7 @@
-import type { Response, Request, NextFunction } from 'express';
+import type { Response, Request, NextFunction, RequestHandler } from 'express';
 import type { Logger } from 'stack-trace-logger';
 import ms, { type StringValue } from 'ms';
+import path from 'pathe';
 import http from 'http';
 import https from 'https';
 import { pipeline } from 'stream';
@@ -51,8 +52,20 @@ import {
 } from '@aws-sdk/client-s3';
 import { ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
-
-import type { ContentFile, FileUploadResponse } from '../interfaces';
+import multer, { type Multer } from 'multer';
+import multerS3 from 'multer-s3';
+import bytes from 'bytes';
+import type {
+    ByteUnitStringValue,
+    ContentFile,
+    File,
+    FILE_EXT,
+    FILE_TYPE,
+    FILES3_METADATA,
+    FileUploadResponse,
+    S3UploadOptions,
+    UploadedS3File,
+} from '../interfaces';
 import { AWSConfigSharingUtil } from './configuration';
 
 const pump = promisify(pipeline);
@@ -85,6 +98,8 @@ export class S3BucketUtil {
 
     public readonly reqId: string | null;
 
+    private readonly maxUploadFileSizeRestriction: ByteUnitStringValue;
+
     constructor({
         logger,
         bucket,
@@ -94,6 +109,7 @@ export class S3BucketUtil {
         endpoint = AWSConfigSharingUtil.endpoint,
         region = AWSConfigSharingUtil.region,
         s3ForcePathStyle = true,
+        maxUploadFileSizeRestriction = '10GB',
     }: {
         logger?: Logger;
         bucket: string;
@@ -103,6 +119,7 @@ export class S3BucketUtil {
         endpoint?: string;
         region?: string;
         s3ForcePathStyle?: boolean;
+        maxUploadFileSizeRestriction?: ByteUnitStringValue;
     }) {
         const credentials = { accessKeyId, secretAccessKey };
         const options = {
@@ -115,6 +132,7 @@ export class S3BucketUtil {
         this.bucket = bucket;
         this.logger = logger;
         this.reqId = reqId ?? null;
+        this.maxUploadFileSizeRestriction = maxUploadFileSizeRestriction;
 
         const s3ClientParams = {
             ...options,
@@ -1113,6 +1131,247 @@ export class S3BucketUtil {
 
                 return;
             }
+        };
+    }
+
+    private static fileFilter(types?: FILE_TYPE[], fileExt?: FILE_EXT[]) {
+        const fileTypesChecker = fileExt?.length ? new RegExp(`\\.(${fileExt.join('|')})$`, 'i') : undefined;
+
+        return function (_req: Request, file: File, cb: multer.FileFilterCallback) {
+            const fileExtension = path.extname(file.originalname).substring(1); // Remove the dot
+            const extname = fileTypesChecker ? fileTypesChecker.test(`.${fileExtension}`) : true;
+            const mimeType = types?.length ? types.some((type) => file.mimetype.startsWith(`${type}/`)) : true;
+
+            if (mimeType && extname) {
+                return cb(null, true);
+            }
+
+            const errorMsg = !extname
+                ? `Upload File Ext Error: Allowed extensions: [${fileExt?.join(', ')}]. Got: ${fileExtension}`
+                : `Upload File Type Error: Allowed types: [${types?.join(', ')}]. Got: ${file.mimetype}`;
+
+            return cb(new Error(errorMsg));
+        };
+    }
+
+    private getFileSize(maxFileSize?: ByteUnitStringValue | number): number | undefined {
+        const fileSizeUnitValue = maxFileSize ?? this.maxUploadFileSizeRestriction;
+        const fileSize = typeof fileSizeUnitValue === 'number' ? fileSizeUnitValue : bytes(fileSizeUnitValue);
+
+        if (!fileSize) {
+            this.logger?.warn(this.reqId, 'Failed to convert fileSize restriction, proceeding without limit', {
+                maxFileSize,
+                maxUploadFileSizeRestriction: this.maxUploadFileSizeRestriction,
+            });
+            return undefined;
+        }
+
+        return fileSize;
+    }
+
+    getUploadFileMW(
+        directory: string,
+        {
+            acl = ACLs.private,
+            maxFileSize,
+            filename: _filename,
+            fileType = [],
+            fileExt = [],
+            metadata: customMetadata,
+        }: S3UploadOptions = {}
+    ): Multer {
+        const fileSize = this.getFileSize(maxFileSize);
+        const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
+        const fileExts = ([] as FILE_EXT[]).concat(fileExt);
+        const fileFilter =
+            fileTypes?.length || fileExts?.length ? S3BucketUtil.fileFilter(fileTypes, fileExts) : undefined;
+
+        return multer({
+            fileFilter,
+            limits: { ...(fileSize && { fileSize }) },
+            storage: multerS3({
+                acl,
+                s3: this.s3Client,
+                bucket: this.bucket,
+                contentType: multerS3.AUTO_CONTENT_TYPE,
+                metadata: async (req: Request & any, file: File, cb: Function) => {
+                    const baseMetadata: FILES3_METADATA = { ...file, directory };
+
+                    if (customMetadata) {
+                        const additionalMetadata =
+                            typeof customMetadata === 'function' ? await customMetadata(req, file) : customMetadata;
+                        Object.assign(baseMetadata, additionalMetadata);
+                    }
+
+                    cb(null, baseMetadata);
+                },
+                key: async (req: Request & any, file: File, cb: Function) => {
+                    let filename: string;
+
+                    if (typeof _filename === 'function') {
+                        filename = await _filename(req, file);
+                    } else if (_filename) {
+                        filename = _filename;
+                    } else {
+                        filename = file.originalname;
+                    }
+
+                    filename = decodeURIComponent(filename);
+                    const normalizedDirectory = directory.endsWith('/') ? directory.slice(0, -1) : directory;
+                    const key = normalizedDirectory ? `${normalizedDirectory}/${filename}` : filename;
+
+                    cb(null, key);
+                },
+            }),
+        });
+    }
+
+    /**
+     * Middleware for uploading a single file
+     * Adds the uploaded file info to req.s3File
+     */
+    uploadSingleFile(fieldName: string, directory: string, options: S3UploadOptions = {}) {
+        const upload = this.getUploadFileMW(directory, options);
+
+        return (req: Request & { s3File?: UploadedS3File } & any, res: Response, next: NextFunction & any) => {
+            const mw: any = upload.single(fieldName);
+            mw(req, res, (err: any) => {
+                if (err) {
+                    this.logger?.error(this.reqId, 'Single file upload error', { fieldName, error: err.message });
+                    return next(err);
+                }
+
+                if (req.file) {
+                    req.s3File = req.file as UploadedS3File;
+                    this.logger?.info(this.reqId, 'Single file uploaded successfully', {
+                        fieldName,
+                        key: req.s3File.key,
+                        location: req.s3File.location,
+                        size: req.s3File.size,
+                    });
+                }
+
+                next();
+            });
+        };
+    }
+
+    /**
+     * Middleware for uploading multiple files with the same field name
+     * Adds the uploaded files info to req.s3Files
+     */
+    uploadMultipleFiles(
+        fieldName: string,
+        directory: string,
+        maxCount: number,
+        options: S3UploadOptions = {}
+    ): RequestHandler {
+        const upload = this.getUploadFileMW(directory, options);
+
+        return (req: Request & { s3Files?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
+            const mw: any = upload.array(fieldName, maxCount);
+            mw(req, res, (err: any) => {
+                if (err) {
+                    this.logger?.error(this.reqId, 'Multiple files upload error', { fieldName, error: err.message });
+                    return next(err);
+                }
+
+                if (req.files && Array.isArray(req.files)) {
+                    req.s3Files = req.files as UploadedS3File[];
+                    this.logger?.info(this.reqId, 'Multiple files uploaded successfully', {
+                        fieldName,
+                        count: req.s3Files.length,
+                        keys: req.s3Files.map((f: any) => f.key),
+                    });
+                }
+
+                next();
+            });
+        };
+    }
+
+    /**
+     * Middleware for uploading multiple files with different field names
+     * Adds the uploaded files info to req.s3FilesByField
+     */
+    uploadFieldsFiles(
+        fields: Array<{ name: string; directory: string; maxCount?: number; options?: S3UploadOptions }>
+    ): RequestHandler {
+        // Create separate multer instances for each field (since each might have different options)
+        const fieldConfigs = fields.map((field) => {
+            const upload = this.getUploadFileMW(field.directory, field.options || {});
+            return {
+                name: field.name,
+                maxCount: field.maxCount || 1,
+                upload,
+                directory: field.directory,
+            };
+        });
+
+        return async (
+            req: Request & { s3FilesByField?: Record<string, UploadedS3File[]> } & any,
+            res: Response,
+            next: NextFunction & any
+        ) => {
+            // We'll use the first upload instance but with fields configuration
+            const multerFields = fieldConfigs.map((f) => ({ name: f.name, maxCount: f.maxCount }));
+            const upload = this.getUploadFileMW(fieldConfigs[0].directory);
+
+            const mw: any = upload.fields(multerFields);
+            mw(req, res, (err: any) => {
+                if (err) {
+                    this.logger?.error(this.reqId, 'Fields upload error', { error: err.message });
+                    return next(err);
+                }
+
+                if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
+                    req.s3FilesByField = req.files as Record<string, UploadedS3File[]>;
+
+                    const uploadSummary = Object.entries(req.s3FilesByField).map(([field, files]: any) => ({
+                        field,
+                        count: files.length,
+                        keys: files.map((f: any) => f.key),
+                    }));
+
+                    this.logger?.info(this.reqId, 'Fields uploaded successfully', { uploadSummary });
+                }
+
+                next();
+            });
+        };
+    }
+
+    /**
+     * Middleware for uploading any files (mixed field names)
+     * Adds the uploaded files info to req.s3AllFiles
+     */
+    uploadAnyFiles(directory: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
+        const upload = this.getUploadFileMW(directory, options);
+
+        return (req: Request & { s3AllFiles?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
+            const anyUpload: any = maxCount ? upload.any() : upload.any();
+
+            anyUpload(req, res, (err: any) => {
+                if (err) {
+                    this.logger?.error(this.reqId, 'Any files upload error', { error: err.message });
+                    return next(err);
+                }
+
+                if (req.files && Array.isArray(req.files)) {
+                    req.s3AllFiles = req.files as UploadedS3File[];
+
+                    if (maxCount && req.s3AllFiles.length > maxCount) {
+                        return next(new Error(`Too many files uploaded. Maximum is ${maxCount}`));
+                    }
+
+                    this.logger?.info(this.reqId, 'Any files uploaded successfully', {
+                        count: req.s3AllFiles.length,
+                        keys: req.s3AllFiles.map((f: any) => f.key),
+                    });
+                }
+
+                next();
+            });
         };
     }
 }

@@ -253,7 +253,7 @@ class S3Service {
     async tagObject(filePath: string, version: string): Promise<void> {
         try {
             const query = qs.stringify({ filePath });
-            const { data: response } = await this.api.put(`/file/version?${query}`, {
+            const { data: response } = await this.api.put(`/files/version?${query}`, {
                 version,
             });
 
