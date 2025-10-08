@@ -170,7 +170,7 @@ class S3Service {
         }
     }
 
-    async downloadSingleFile(filePath: string): Promise<[string, string]> {
+    async downloadSingleFile(filePath: string, onProgress?: (progress: number) => void): Promise<[string, string]> {
         try {
             if (this.downloadAbortController) {
                 this.downloadAbortController.abort();
@@ -183,6 +183,14 @@ class S3Service {
                 responseType: 'blob',
                 timeout: 600_000, // 10m timeout
                 signal: this.downloadAbortController.signal,
+                onDownloadProgress: onProgress
+                    ? (progressEvent: any) => {
+                          const percentage = progressEvent.total
+                              ? (progressEvent.loaded / progressEvent.total) * 100
+                              : 0;
+                          onProgress(percentage);
+                      }
+                    : undefined,
             });
 
             const contentDisposition = headers['content-disposition'];
@@ -202,7 +210,11 @@ class S3Service {
         }
     }
 
-    async downloadFilesAsZip(filePath: string | string[], filename?: string): Promise<[string, string]> {
+    async downloadFilesAsZip(
+        filePath: string | string[],
+        filename?: string,
+        onProgress?: (progress: number) => void
+    ): Promise<[string, string]> {
         try {
             if (this.downloadAbortController) {
                 this.downloadAbortController.abort();
@@ -220,8 +232,16 @@ class S3Service {
 
             const { data } = await this.api.get(`/files/download?${query}${filenameQueryString}`, {
                 responseType: 'blob',
-                timeout: 600_000, // 10m timeout
+                timeout: 600_000,
                 signal: this.downloadAbortController.signal,
+                onDownloadProgress: onProgress
+                    ? (progressEvent: any) => {
+                          const percentage = progressEvent.total
+                              ? (progressEvent.loaded / progressEvent.total) * 100
+                              : 0;
+                          onProgress(percentage);
+                      }
+                    : undefined,
             });
 
             // Create a blob URL and trigger download

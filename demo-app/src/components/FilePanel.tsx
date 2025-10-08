@@ -32,6 +32,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     const [uploading, setUploading] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [downloadProgress, setDownloadProgress] = useState(0);
     const [uploadingFileName, setUploadingFileName] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [tagDialogOpen, setTagDialogOpen] = useState(false);
@@ -90,9 +91,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
         try {
             const filePath = currentPath ? `${currentPath}${file.name}` : `/${file.name}`;
-            await s3Service.uploadFile(file, filePath, (progress) => {
-                setUploadProgress(progress);
-            });
+            await s3Service.uploadFile(file, filePath, (progress) => setUploadProgress(progress));
 
             await loadFiles();
             onRefresh();
@@ -136,6 +135,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
     const handleDownload = async () => {
         if (selectedFiles.size === 0) return;
 
+        setDownloadProgress(0);
         try {
             if (selectedFiles.size === 1) {
                 await downloadSingleFile();
@@ -144,12 +144,18 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
             }
         } catch (error) {
             console.error('Failed to download:', error);
+        } finally {
+            setDownloadProgress(0);
         }
     };
 
     const downloadMultipleAsZip = async () => {
         const filePath: string[] = Array.from(selectedFiles).filter((fileKey) => files.find((f) => f.key === fileKey));
-        const [url, filename] = await s3Service.downloadFilesAsZip(filePath, 'aws-s3-bucket-utils-download.zip');
+        const [url, filename] = await s3Service.downloadFilesAsZip(
+            filePath,
+            'aws-s3-bucket-utils-download.zip',
+            (progress) => setDownloadProgress(progress)
+        );
 
         return downloadFile(url, filename);
     };
@@ -158,7 +164,9 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
         const [filePath]: string[] = Array.from(selectedFiles).filter((fileKey) =>
             files.find((f) => f.key === fileKey)
         );
-        const [url, filename] = await s3Service.downloadSingleFile(filePath);
+        const [url, filename] = await s3Service.downloadSingleFile(filePath, (progress) =>
+            setDownloadProgress(progress)
+        );
 
         return downloadFile(url, filename);
     };
@@ -292,7 +300,6 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                         <Box className="upload-progress">
                             <Box className="progress-info">
                                 <Typography variant="body2">Uploading: {uploadingFileName}</Typography>
-                                <Typography variant="body2">{Math.round(uploadProgress)}%</Typography>
                             </Box>
                             <LinearProgress variant="determinate" value={uploadProgress} />
                         </Box>
@@ -380,7 +387,11 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                                             bottom: 0,
                                                         }}
                                                     >
-                                                        <CircularProgress color="info" size={15} />
+                                                        <CircularProgress
+                                                            color="info"
+                                                            size={15}
+                                                            value={downloadProgress}
+                                                        />
                                                     </Box>
                                                 ) : null
                                             }
@@ -416,7 +427,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                                         bottom: 0,
                                                     }}
                                                 >
-                                                    <CircularProgress color="info" size={15} />
+                                                    <CircularProgress color="info" size={15} value={downloadProgress} />
                                                 </Box>
                                             ) : null
                                         }
