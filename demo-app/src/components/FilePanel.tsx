@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuid } from 'uuid';
-import { Box, DialogTitle } from '@mui/material';
+import { Box, DialogTitle, DialogContent } from '@mui/material';
 import {
     Typography,
     Button,
@@ -77,17 +77,6 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
             newSelected.add(fileKey);
         }
         setSelectedFiles(newSelected);
-
-        if (newSelected.size === 1) {
-            const file = files.find((f) => f.key === fileKey);
-            if (file && isVideoFile(file.name)) {
-                generatePreview(fileKey);
-            } else {
-                setVideoPreviewUrl('');
-            }
-        } else {
-            setVideoPreviewUrl('');
-        }
     };
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,6 +209,13 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
             const url = await s3Service.getSignedUrl(fileKey, 3600);
             setTempLink(url);
             setLinkDialogOpen(true);
+
+            const file = files.find((f) => f.key === fileKey);
+            if (file && isVideoFile(file.name)) {
+                await generatePreview(fileKey);
+            } else {
+                setVideoPreviewUrl('');
+            }
         } catch (error) {
             console.error('Failed to generate link:', error);
         }
@@ -450,14 +446,6 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                                         </>
                                     )}
                                 </Box>
-
-                                {videoPreviewUrl && (
-                                    <Box className="video-preview">
-                                        <video controls src={videoPreviewUrl}>
-                                            Your browser does not support the video tag.
-                                        </video>
-                                    </Box>
-                                )}
                             </Box>
                         )}
                     </>
@@ -518,22 +506,43 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
             <Dialog
                 open={linkDialogOpen}
-                onClose={() => setLinkDialogOpen(false)}
+                onClose={() => {
+                    setLinkDialogOpen(false);
+                    setVideoPreviewUrl('');
+                }}
                 maxWidth="md"
                 fullWidth
                 title="Temporary Link"
-                actions={[{ onClick: () => setLinkDialogOpen(false), label: 'Close' }]}
+                actions={[
+                    {
+                        onClick: () => {
+                            setLinkDialogOpen(false);
+                            setVideoPreviewUrl('');
+                        },
+                        label: 'Close',
+                    },
+                ]}
             >
                 <DialogTitle>Temporary Link</DialogTitle>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                    This link will expire in 1 hour
-                </Typography>
-                <InputText
-                    fullWidth
-                    value={tempLink}
-                    endCmp={[<Button onClick={copyToClipboard} edge="end" icon="ContentCopy" />]}
-                    readOnly
-                />
+                <DialogContent>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                        This link will expire in 1 hour
+                    </Typography>
+                    <InputText
+                        fullWidth
+                        value={tempLink}
+                        endCmp={[<Button onClick={copyToClipboard} edge="end" icon="ContentCopy" />]}
+                        readOnly
+                    />
+
+                    {videoPreviewUrl && (
+                        <Box className="video-preview" mt={2}>
+                            <video controls src={videoPreviewUrl}>
+                                Your browser does not support the video tag.
+                            </video>
+                        </Box>
+                    )}
+                </DialogContent>
             </Dialog>
         </div>
     );
