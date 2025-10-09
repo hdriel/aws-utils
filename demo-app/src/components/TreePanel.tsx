@@ -68,6 +68,7 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
 const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
     const [treeData, setTreeData] = useState<TreeNodeItem | null>(null);
     const [expanded, setExpanded] = useState<string[]>(['root']);
+    // @ts-ignore
     const [selectedIds, setSelectedIds] = useState<string[]>(['root']);
     const [selected, setSelected] = useState<string>('root');
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
