@@ -849,26 +849,19 @@ export class S3BucketUtil {
             req.once('close', onClose);
 
             try {
-                this.logger?.info(this.reqId, 'Starting parallel file download...', {
-                    fileCount: filePaths.length,
-                });
+                this.logger?.info(this.reqId, 'Starting parallel file download...', { fileCount: filePaths.length });
 
-                // ✅ STEP 1: Download ALL files in parallel and buffer in memory
                 const downloadPromises = filePaths.map(async (filePath) => {
                     try {
                         if (abort.signal.aborted) return null;
 
-                        const stream = await this.streamObjectFile(filePath, {
-                            abortSignal: abort.signal,
-                            checkFileExists: false,
-                        });
+                        const stream = await this.streamObjectFile(filePath, { abortSignal: abort.signal });
 
                         if (!stream) {
                             this.logger?.warn(this.reqId, 'File not found', { filePath });
                             return null;
                         }
 
-                        // Convert stream to buffer
                         const chunks: Buffer[] = [];
                         for await (const chunk of stream) {
                             if (abort.signal.aborted) {
@@ -886,11 +879,7 @@ export class S3BucketUtil {
                             sizeMB: (buffer.length / (1024 * 1024)).toFixed(2),
                         });
 
-                        return {
-                            name: fileName,
-                            buffer,
-                            path: filePath,
-                        };
+                        return { buffer, name: fileName, path: filePath };
                     } catch (error) {
                         this.logger?.warn(this.reqId, 'Failed to download file', { filePath, error });
                         return null;
@@ -913,7 +902,6 @@ export class S3BucketUtil {
                     totalSizeMB: (fileBuffers.reduce((sum, f) => sum + f!.buffer.length, 0) / (1024 * 1024)).toFixed(2),
                 });
 
-                // ✅ STEP 2: Create zip to measure actual size
                 const measureArchive = archiver('zip', { zlib: { level: compressionLevel } });
                 let actualZipSize = 0;
 
@@ -921,7 +909,6 @@ export class S3BucketUtil {
                     actualZipSize += chunk.length;
                 });
 
-                // Add all buffered files to measure archive
                 for (const file of fileBuffers) {
                     if (abort.signal.aborted) break;
                     measureArchive.append(file!.buffer, { name: file!.name });
@@ -939,12 +926,11 @@ export class S3BucketUtil {
                     sizeMB: (actualZipSize / (1024 * 1024)).toFixed(2),
                 });
 
-                // ✅ STEP 3: Stream the actual zip with exact Content-Length
                 const actualArchive = archiver('zip', { zlib: { level: compressionLevel } });
 
                 res.setHeader('Content-Type', 'application/zip');
                 res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-                res.setHeader('Content-Length', String(actualZipSize)); // ✅ EXACT size!
+                res.setHeader('Content-Length', String(actualZipSize));
                 res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Content-Disposition, Content-Length');
 
                 actualArchive.on('error', (err) => {
