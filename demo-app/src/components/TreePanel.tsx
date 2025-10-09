@@ -69,7 +69,7 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
 export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
     const [treeData, setTreeData] = useState<TreeNodeItem | null>(null);
     const [expanded, setExpanded] = useState<string[]>(['root']);
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [selectedIds, setSelectedIds] = useState<string[]>(['root']);
     const [selected, setSelected] = useState<string>('root');
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -323,8 +323,6 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         }
     };
 
-    console.log('treeData', treeData);
-
     return (
         <div className="tree-panel">
             <div className="tree-header">
@@ -372,9 +370,6 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                         }
                     }}
                     nodes={treeData ? [treeData] : undefined}
-                    externalItemProps={{
-                        isExpandedId: (nodeId: string) => expanded.includes(nodeId),
-                    }}
                     TreeItemComponent={IndentBorderTreeItem as any}
                     {...IndentBorderTreeItemIcons}
                     collapseIcon="FolderOpen"
