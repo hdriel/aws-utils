@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { DialogTitle, Box } from '@mui/material';
 import {
     TreeView,
@@ -80,7 +79,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
         loadRootFiles();
     }, [refreshTrigger]);
 
-    const buildNodeLabel = (node: AwsTreeItem, nodeId: string, nodePath: string) => {
+    const buildNodeLabel = (node: AwsTreeItem, nodeId: string, nodePath: string, parentId: string) => {
         const isDirectory = node.type === 'directory';
 
         const label = (
@@ -113,6 +112,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                                 path: nodePath,
                                 directory: isDirectory,
                                 name: node.name,
+                                parentId,
                             } as TreeNodeItem)
                         }
                     />
@@ -123,14 +123,15 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
         return label;
     };
 
-    function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
+    function buildTreeData(root: AwsTreeItem, parentId: string | null = null, level = 0): TreeNodeItem | null {
         if (!root) return null;
 
-        const nodeId = !root.path || root.path === '/' ? 'root' : uuidv4();
-        const label = buildNodeLabel(root, nodeId, root.path);
+        const nodeId = !root.path || root.path === '/' ? 'root' : root.path || '/';
+        const label = buildNodeLabel(root, nodeId, root.path, parentId || 'root');
 
         return {
             id: nodeId,
+            parentId,
             level,
             path: root.path,
             name: root.name,
@@ -145,7 +146,9 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                     '& .MuiTreeItem-iconContainer': { display: 'none' },
                 }),
             },
-            children: root.children?.map((node) => buildTreeData(node, level + 1)).filter((v) => v) as TreeNodeItem[],
+            children: root.children
+                ?.map((node) => buildTreeData(node, nodeId, level + 1))
+                .filter((v) => v) as TreeNodeItem[],
         };
     }
 
@@ -203,13 +206,14 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
 
                 const nodeData = buildTreeFromFiles(result, node.path);
                 const children = nodeData.children.map((currNode, index, arr) => {
-                    const currNodeId = uuidv4();
                     const currNodePath =
                         currNode.type === 'file' ? currNode.path : `${node.path ?? ''}/${currNode.path}`;
-                    const label = buildNodeLabel(currNode, nodeId, currNodePath);
+                    const currNodeId = currNodePath;
+                    const label = buildNodeLabel(currNode, nodeId, currNodePath, node.id);
 
                     return {
                         id: currNodeId,
+                        parentId: node.id,
                         level: node.level + 1,
                         path: currNodePath,
                         name: currNode.name,
@@ -318,12 +322,13 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                 setDeleteDialogOpen(false);
 
                 if (!localstack) {
-                    setSelected(nodeAction.id);
-                    return handleNodeToggle(nodeAction.id);
+                    await handleNodeToggle(nodeAction.id);
                 } else {
-                    setSelected('root');
                     await loadRootFiles();
                 }
+
+                setExpanded(['root']);
+                setSelected('root');
 
                 onRefresh();
             }
@@ -373,7 +378,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                     onExpanded={(nodeIds: string[]) => setExpanded(nodeIds)}
                     TransitionComponent={null}
                     onSelected={(nodeIds: string[]) => {
-                        setSelectedIds(nodeIds);
+                        setSelectedIds((state) => (state.join(',') !== nodeIds.join(',') ? nodeIds : state));
                         const [nodeId] = nodeIds;
                         if (nodeId !== selected || nodeId !== 'root') {
                             setSelected(nodeId);

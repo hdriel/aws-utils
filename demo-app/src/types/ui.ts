@@ -11,6 +11,7 @@ export interface AwsTreeItem {
 }
 
 export interface TreeNodeItem extends TreeViewNodeProps {
+    parentId: null | string;
     directory: boolean;
     prefix?: string;
     path: string;

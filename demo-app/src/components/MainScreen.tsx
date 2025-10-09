@@ -4,7 +4,7 @@ import { Button, Typography, SVGIcon } from 'mui-simple';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
 import TreePanel from './TreePanel';
-import { FilePanel } from './FilePanel';
+import FilePanel from './FilePanel';
 import { s3Service } from '../services/s3Service';
 import '../styles/mainScreen.scss';
 
@@ -36,7 +36,7 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstac
                         <Typography variant="h6" component="h1" color={'#ececec'}>
                             AWS S3 File Explorer
                         </Typography>
-                        <Typography variant="caption" className="bucket-info" color="grey">
+                        <Typography variant="caption" className="bucket-info" color={'#ececec'}>
                             Bucket: {bucketName}
                         </Typography>
                     </Box>
