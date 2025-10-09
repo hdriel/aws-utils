@@ -364,7 +364,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                     onSelected={(nodeIds: string[]) => {
                         setSelectedIds(nodeIds);
                         const [nodeId] = nodeIds;
-                        if (nodeId !== selected) {
+                        if (nodeId !== selected || nodeId !== 'root') {
                             setSelected(nodeId);
                             return handleNodeToggle(nodeId);
                         }
