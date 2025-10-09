@@ -3,7 +3,7 @@ import { getS3BucketUtil } from '../shared';
 
 export const getDirectoryListCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const directory = req.query?.directory as string;
+    const directory = req.query?.directory ? decodeURIComponent(req.query?.directory as string) : undefined;
     const result = await s3BucketUtil.directoryList(directory);
 
     res.json(result);
@@ -11,7 +11,7 @@ export const getDirectoryListCtrl = async (req: Request, res: Response, _next: N
 
 export const getDirectoryFileListCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const directory = req.query?.directory as string;
+    const directory = req.query?.directory ? decodeURIComponent(req.query?.directory as string) : undefined;
     const result = await s3BucketUtil.fileListInfo(directory);
 
     res.json(result);

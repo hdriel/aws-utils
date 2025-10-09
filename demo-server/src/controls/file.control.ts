@@ -2,27 +2,36 @@ import { NextFunction, Request, Response } from 'express';
 import { getS3BucketUtil, type UploadedS3File } from '../shared';
 import logger from '../logger';
 
-export const getFileInfoCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const getFileInfoCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query.filePath as string;
+    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    if (!filePath) {
+        return next(new Error('No file path provided'));
+    }
 
     const result = await s3BucketUtil.fileInfo(filePath);
 
     res.json(result);
 };
 
-export const getFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const getFileDataCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query.filePath as string;
+    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    if (!filePath) {
+        return next(new Error('No file path provided'));
+    }
 
     const result = await s3BucketUtil.fileContent(filePath, 'utf8');
 
     res.json(result);
 };
 
-export const getFileUrlCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const getFileUrlCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query.filePath as string;
+    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    if (!filePath) {
+        return next(new Error('No file path provided'));
+    }
     const expireIn = req.query?.expireIn ? +req.query.expireIn : undefined;
 
     const result = await s3BucketUtil.fileUrl(filePath, expireIn);
@@ -30,26 +39,35 @@ export const getFileUrlCtrl = async (req: Request, res: Response, _next: NextFun
     res.json(result);
 };
 
-export const getFileVersionCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const getFileVersionCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query.filePath as string;
+    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    if (!filePath) {
+        return next(new Error('No file path provided'));
+    }
 
     const result = await s3BucketUtil.fileVersion(filePath);
 
     res.json(result);
 };
-export const toggingFileVersionCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const toggingFileVersionCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query.filePath as string;
+    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    if (!filePath) {
+        return next(new Error('No file path provided'));
+    }
 
     const result = await s3BucketUtil.taggingFile(filePath, req.body);
 
     res.json(result);
 };
 
-export const deleteFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const deleteFileCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query.filePath as string;
+    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    if (!filePath) {
+        return next(new Error('No file path provided'));
+    }
 
     const result = await s3BucketUtil.deleteFile(filePath);
 
@@ -127,8 +145,10 @@ export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: 
 
 export const streamVideoFilesCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const fileKey = req.query.file && decodeURIComponent(req.query.file as string);
-
+    const fileKey = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;
+    if (!fileKey) {
+        return next(new Error('No file path provided'));
+    }
     if (!fileKey) {
         return res.status(400).json({ error: 'file is required' });
     }

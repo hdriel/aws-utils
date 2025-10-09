@@ -1,47 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { DialogTitle, Box } from '@mui/material';
-import { TreeView, Button, Typography, InputText, Dialog, TreeViewNodeProps, SVGIcon } from 'mui-simple';
+import {
+    TreeView,
+    Button,
+    Typography,
+    InputText,
+    Dialog,
+    SVGIcon,
+    IndentBorderTreeItemIcons,
+    IndentBorderTreeItem,
+} from 'mui-simple';
 import { s3Service } from '../services/s3Service';
 import '../styles/treeView.scss';
-import { AwsTreeItem } from '../types/ui';
+import { AwsTreeItem, TreeNodeItem } from '../types/ui';
 import { formatFileSize, getFileIcon } from '../utils/fileUtils.ts';
 import { ListObjectsOutput, S3ResponseFile } from '../types/aws.ts';
-
-const CustomNodeItem: React.FC<any> = (props) => {
-    const { nodeId, isExpandedId, ...node } = props ?? {};
-
-    const connector = node.level === 0 ? '' : node.isLast ? '└─ ' : '├─ ';
-    const currentPrefix = node.level === 0 ? '' : connector;
-    // const childPrefix = node.level === 0 ? '' : prefix + (node.isLast ? '   ' : '│  ');
-
-    return (
-        <Box className="item-info" key={nodeId}>
-            <Typography
-                component="span"
-                sx={{
-                    fontFamily: 'monospace',
-                    color: 'text.secondary',
-                    whiteSpace: 'pre',
-                    userSelect: 'none',
-                }}
-            >
-                {currentPrefix ?? ''}
-            </Typography>
-            <Box className="item-icon">
-                {node.directory ? (
-                    <SVGIcon muiIconName={isExpandedId(node.id) ? 'FolderOpen' : 'Folder'} />
-                ) : (
-                    <SVGIcon muiIconName={getFileIcon(node.directory ? undefined : node.name)} />
-                )}
-            </Box>
-            <Typography className="item-name">{node.label}</Typography>
-            {!node.directory && node.size !== undefined && (
-                <Typography className="item-size">{formatFileSize(node.size)}</Typography>
-            )}
-        </Box>
-    );
-};
 
 interface TreePanelProps {
     onFolderSelect: (path: string) => void;
@@ -50,41 +24,6 @@ interface TreePanelProps {
     refreshTrigger: number;
     localstack: boolean;
 }
-interface TreeNodeItem extends TreeViewNodeProps {
-    directory: boolean;
-    prefix?: string;
-    path: string;
-    name: string;
-    size: number;
-    level: number;
-    children: TreeNodeItem[];
-}
-
-function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
-    if (!root) return null;
-
-    // Build the tree connector lines
-    /*
-        📁 root
-        ├─ 📁 folder1
-        │  ├─ 📄 file1.txt
-        │  └─ 📄 file2.txt
-        ├─ 📁 folder2
-        │  └─ 📄 file3.txt
-        └─ 📄 readme.md
-     */
-
-    return {
-        id: uuidv4(),
-        level,
-        path: root.path,
-        name: root.name,
-        label: root.name,
-        size: root.size,
-        directory: root.type === 'directory',
-        children: root.children?.map((node) => buildTreeData(node, level + 1)).filter((v) => v) as TreeNodeItem[],
-    };
-}
 
 const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): AwsTreeItem => {
     const { files, directories } = result;
@@ -92,10 +31,11 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
 
     directories.forEach((path: string) => {
         const name =
-            path
-                .split('/')
-                .filter((p) => p)
-                .pop() || path;
+            '/' +
+                path
+                    .split('/')
+                    .filter((p) => p)
+                    .pop() || path;
 
         children.push({
             name,
@@ -122,13 +62,14 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
         path: basePath || '/',
         type: 'directory',
         size: 0,
-        children,
+        children: children.length ? children : [{ name: '', path: '' } as any],
     };
 };
 
 export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
     const [treeData, setTreeData] = useState<TreeNodeItem | null>(null);
     const [expanded, setExpanded] = useState<string[]>(['root']);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selected, setSelected] = useState<string>('root');
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -139,6 +80,75 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         loadRootFiles();
     }, [refreshTrigger]);
 
+    const buildNodeLabel = (node: AwsTreeItem, nodeId: string, nodePath: string) => {
+        const isDirectory = node.type === 'directory';
+
+        const label = (
+            <Box className="item-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                {isDirectory ? null : <SVGIcon muiIconName={getFileIcon(isDirectory ? '' : node.name)} />}
+                <Typography className="item-name">{node.name}</Typography>
+                <Box sx={{ marginInlineStart: 'auto' }}>
+                    {!isDirectory && node.size !== undefined && (
+                        <Typography className="item-size">{formatFileSize(node.size)}</Typography>
+                    )}
+                </Box>
+
+                {node.path && node.path !== '/' && (
+                    <Button
+                        icon={isDirectory ? 'DeleteForever' : 'Delete'}
+                        size="small"
+                        tooltipProps={{
+                            placement: 'top',
+                            title: (
+                                <p style={{ width: 'max-content' }}>
+                                    Delete {node.type}:<br />
+                                    {isDirectory ? nodePath : node.name}
+                                </p>
+                            ),
+                        }}
+                        sx={{ ...(!isDirectory && { marginInlineEnd: '-5px' }) }}
+                        onClick={() =>
+                            handleDeleteAction({
+                                id: nodeId,
+                                path: nodePath,
+                                directory: isDirectory,
+                                name: node.name,
+                            } as TreeNodeItem)
+                        }
+                    />
+                )}
+            </Box>
+        ) as any;
+
+        return label;
+    };
+
+    function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
+        if (!root) return null;
+
+        const nodeId = !root.path || root.path === '/' ? 'root' : uuidv4();
+        const label = buildNodeLabel(root, nodeId, root.path);
+
+        return {
+            id: nodeId,
+            level,
+            path: root.path,
+            name: root.name,
+            label,
+            size: root.size,
+            index: root.index ?? 0,
+            isLast: root.isLast ?? false,
+            directory: root.type === 'directory',
+            sx: {
+                ...((root.type === 'file' || !root.name) && {
+                    '& .MuiTreeItem-label': { marginLeft: '-5px' },
+                    '& .MuiTreeItem-iconContainer': { display: 'none' },
+                }),
+            },
+            children: root.children?.map((node) => buildTreeData(node, level + 1)).filter((v) => v) as TreeNodeItem[],
+        };
+    }
+
     const loadRootFiles = async () => {
         try {
             if (localstack) {
@@ -146,7 +156,6 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 const data = buildTreeData(root);
                 if (!data) return;
 
-                data.id = 'root';
                 setTreeData(data);
             } else {
                 const result = await s3Service.listObjects();
@@ -197,20 +206,34 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 if (node && node.directory && (!node.children || node.children.length === 0)) {
                     try {
                         const result = await s3Service.listObjects(node.path);
+
                         const nodeData = buildTreeFromFiles(result, node.path);
-                        const children = nodeData.children.map(
-                            (currNode) =>
-                                ({
-                                    id: uuidv4(),
-                                    level: node.level + 1,
-                                    path: `${node.path ?? ''}/${currNode.path}`,
-                                    name: currNode.name,
-                                    label: currNode.name,
-                                    size: currNode.size,
-                                    directory: currNode.type === 'directory',
-                                    children: [],
-                                }) as TreeNodeItem
-                        );
+                        const children = nodeData.children.map((currNode, index, arr) => {
+                            const currNodeId = uuidv4();
+                            const currNodePath =
+                                currNode.type === 'file' ? currNode.path : `${node.path ?? ''}/${currNode.path}`;
+                            const label = buildNodeLabel(currNode, nodeId, currNodePath);
+
+                            return {
+                                id: currNodeId,
+                                level: node.level + 1,
+                                path: currNodePath,
+                                name: currNode.name,
+                                label,
+                                size: currNode.size,
+                                directory: currNode.type === 'directory',
+                                children: [],
+                                sx: {
+                                    ...((currNode.type === 'file' || !currNode.name) && {
+                                        '& .MuiTreeItem-label': { marginLeft: '-5px' },
+                                        '& .MuiTreeItem-iconContainer': { display: 'none' },
+                                    }),
+                                },
+                                index,
+                                isLast: index === arr.length - 1,
+                            } as TreeNodeItem;
+                        });
+
                         updateNodeChildren(nodeId, children);
                     } catch (error) {
                         console.error('Failed to load folder contents:', error);
@@ -276,16 +299,17 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         }
     };
 
-    const handleDeleteFolder = async () => {
-        if (!selectedNode || selectedNode?.id === 'root') return;
+    const handleDeleteAction = async (node?: TreeNodeItem | null | undefined) => {
+        const nodeAction = node || selectedNode;
+        if (!nodeAction || nodeAction?.id === 'root') return;
 
         setLoading(true);
         try {
-            if (selectedNode) {
-                if (selectedNode.directory) {
-                    await s3Service.deleteFolder(selectedNode.path);
+            if (nodeAction) {
+                if (nodeAction.directory) {
+                    await s3Service.deleteFolder(nodeAction.path);
                 } else {
-                    await s3Service.deleteObject(selectedNode.path);
+                    await s3Service.deleteObject(nodeAction.path);
                 }
                 setDeleteDialogOpen(false);
                 setSelected('root');
@@ -298,6 +322,8 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
             setLoading(false);
         }
     };
+
+    console.log('treeData', treeData);
 
     return (
         <div className="tree-panel">
@@ -331,14 +357,14 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
             <div className="tree-content">
                 <TreeView
-                    collapseIcon={'ExpandMore'}
-                    expandIcon={'ChevronRight'}
                     expandedIds={expanded}
+                    // selectedIds={selectedIds}
                     selectedIds={['root']}
                     fieldId="id"
                     onExpanded={(nodeIds: string[]) => setExpanded(nodeIds)}
                     TransitionComponent={null}
                     onSelected={(nodeIds: string[]) => {
+                        setSelectedIds(nodeIds);
                         const [nodeId] = nodeIds;
                         if (nodeId !== selected) {
                             setSelected(nodeId);
@@ -349,7 +375,11 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                     externalItemProps={{
                         isExpandedId: (nodeId: string) => expanded.includes(nodeId),
                     }}
-                    CustomComponent={CustomNodeItem as any}
+                    TreeItemComponent={IndentBorderTreeItem as any}
+                    {...IndentBorderTreeItemIcons}
+                    collapseIcon="FolderOpen"
+                    expandIcon="Folder"
+                    endIcon="Folder"
                 />
             </div>
 
@@ -381,7 +411,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 actions={[
                     { onClick: () => setDeleteDialogOpen(false), label: 'Cancel' },
                     {
-                        onClick: handleDeleteFolder,
+                        onClick: handleDeleteAction,
                         label: 'Delete',
                         variant: 'contained',
                         color: 'error',

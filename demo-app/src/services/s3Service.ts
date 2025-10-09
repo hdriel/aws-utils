@@ -53,7 +53,7 @@ class S3Service {
 
     async listFileObjects(directory: string = ''): Promise<S3ResponseFile[]> {
         try {
-            const query = qs.stringify({ directory });
+            const query = qs.stringify({ directory: encodeURIComponent(directory) });
             const { data: response } = await this.api.get(`/directories/files?${query}`);
 
             // console.log('listFileObjects', directory, response);
@@ -66,7 +66,7 @@ class S3Service {
 
     async listObjects(directory: string = ''): Promise<ListObjectsOutput> {
         try {
-            const query = qs.stringify({ ...(directory && { directory }) });
+            const query = qs.stringify({ ...(directory && { directory: encodeURIComponent(directory) }) });
             const { data: response } = await this.api.get(`/directories?${query}`);
 
             console.log('listObjects', directory, response);
@@ -151,7 +151,7 @@ class S3Service {
 
     async deleteObject(filePath: string): Promise<void> {
         try {
-            const query = qs.stringify({ filePath });
+            const query = qs.stringify({ filePath: encodeURIComponent(filePath) });
             const { data: response } = await this.api.delete(`/files?${query}`);
 
             await response;
@@ -163,7 +163,7 @@ class S3Service {
 
     async getSignedUrl(filePath: string, expireIn: number): Promise<string> {
         try {
-            const query = qs.stringify({ expireIn: String(expireIn), filePath });
+            const query = qs.stringify({ expireIn: String(expireIn), filePath: encodeURIComponent(filePath) });
             const { data: response } = await this.api.get(`/files/url?${query}`);
 
             return response;
