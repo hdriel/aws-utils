@@ -60,7 +60,7 @@ const awsRegions = [
 ];
 const defaultOptionValue = awsRegions.find((v) => v.default)?.value as string;
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const [credentials, setCredentials] = useState<AWSCredentials>({
         accessKeyId: import.meta.env.VITE_LOCALSTACK_ACCESS_KEY_ID ?? '',
         secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
@@ -249,3 +249,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </div>
     );
 };
+
+// LoginScreen.whyDidYouRender = true;
+
+export default LoginScreen;

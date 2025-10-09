@@ -66,7 +66,7 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
     };
 };
 
-export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
+const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
     const [treeData, setTreeData] = useState<TreeNodeItem | null>(null);
     const [expanded, setExpanded] = useState<string[]>(['root']);
     const [selectedIds, setSelectedIds] = useState<string[]>(['root']);
@@ -432,3 +432,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         </div>
     );
 };
+
+TreePanel.whyDidYouRender = true;
+
+export default TreePanel;

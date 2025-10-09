@@ -17,7 +17,7 @@ import {
 
 import { FolderOpen } from '@mui/icons-material';
 import { s3Service } from '../services/s3Service.ts';
-import { formatFileSize, isVideoFile, downloadFile, getFileIcon } from '../utils/fileUtils.ts';
+import { formatFileSize, isVideoFile, downloadFile, getFileIcon, isImageFile } from '../utils/fileUtils.ts';
 import { S3File } from '../types/aws.ts';
 import '../styles/filePanel.scss';
 
@@ -26,7 +26,7 @@ interface FilePanelProps {
     onRefresh: () => void;
 }
 
-export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
+const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
     const [files, setFiles] = useState<S3File[]>([]);
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [uploading, setUploading] = useState(false);
@@ -62,7 +62,9 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                 type: 'file',
             }));
             setFiles(loadedFiles);
-            setSelectedFiles(new Set());
+            if (selectedFiles.size !== 0) {
+                setSelectedFiles(new Set());
+            }
             setVideoPreviewUrl('');
             setTempLink('');
         } catch (error) {
@@ -180,7 +182,9 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
             }
 
             setDeleteDialogOpen(false);
-            setSelectedFiles(new Set());
+            if (selectedFiles.size !== 0) {
+                setSelectedFiles(new Set());
+            }
             await loadFiles();
             onRefresh();
         } catch (error) {
@@ -569,8 +573,18 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
                             </video>
                         </Box>
                     )}
+
+                    {isImageFile(Array.from(selectedFiles)?.[0] ?? '') && (
+                        <Box className="video-preview" mt={2}>
+                            <img src={tempLink} alt={Array.from(selectedFiles)[0]} />
+                        </Box>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>
     );
 };
+
+FilePanel.whyDidYouRender = true;
+
+export default FilePanel;

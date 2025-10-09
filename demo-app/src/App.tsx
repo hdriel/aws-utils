@@ -1,17 +1,13 @@
 import { useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { LoginScreen } from './components/LoginScreen.tsx';
-import { MainScreen } from './components/MainScreen';
+import LoginScreen from './components/LoginScreen';
+import MainScreen from './components/MainScreen';
 
 const theme = createTheme({
     palette: {
-        primary: {
-            main: '#667eea',
-        },
-        secondary: {
-            main: '#764ba2',
-        },
+        primary: { main: '#667eea' },
+        secondary: { main: '#764ba2' },
     },
     typography: {
         fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',

@@ -3,7 +3,7 @@ import { Box } from '@mui/material';
 import { Button, Typography, SVGIcon } from 'mui-simple';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
-import { TreePanel } from './TreePanel';
+import TreePanel from './TreePanel';
 import { FilePanel } from './FilePanel';
 import { s3Service } from '../services/s3Service';
 import '../styles/mainScreen.scss';
@@ -14,7 +14,7 @@ interface MainScreenProps {
     onLogout: () => void;
 }
 
-export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstack }) => {
+const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstack }) => {
     const [currentPath, setCurrentPath] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -71,3 +71,7 @@ export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, lo
         </div>
     );
 };
+
+// MainScreen.whyDidYouRender = true;
+
+export default MainScreen;
