@@ -12,3 +12,19 @@ export interface S3File {
     lastModified: Date;
     type: 'file' | 'folder';
 }
+
+export interface S3ResponseFile {
+    ChecksumAlgorithm: string[];
+    ChecksumType: string;
+    ETag: string;
+    Name: string;
+    Key: string;
+    LastModified: string;
+    Size: number;
+    StorageClass: string;
+}
+
+export interface ListObjectsOutput {
+    directories: string[];
+    files: S3ResponseFile[];
+}

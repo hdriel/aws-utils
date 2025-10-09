@@ -10,10 +10,11 @@ import '../styles/mainScreen.scss';
 
 interface MainScreenProps {
     bucketName: string;
+    localstack: boolean;
     onLogout: () => void;
 }
 
-export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout }) => {
+export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstack }) => {
     const [currentPath, setCurrentPath] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -58,6 +59,7 @@ export const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout }) 
                             onFolderSelect={setCurrentPath}
                             onRefresh={handleRefresh}
                             refreshTrigger={refreshTrigger}
+                            localstack={!localstack}
                         />
                     </Panel>
                     <PanelResizeHandle />

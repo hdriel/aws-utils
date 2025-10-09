@@ -1,6 +1,7 @@
 export interface AwsTreeItem {
     name: string;
     path: string;
+    size: number;
     type: 'directory' | 'file';
     children: AwsTreeItem[];
 }

@@ -51,7 +51,7 @@ export const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) 
 
     const loadFiles = async () => {
         try {
-            const files = await s3Service.listObjects(currentPath);
+            const files = await s3Service.listFileObjects(currentPath);
 
             const loadedFiles: S3File[] = files.map((file) => ({
                 id: uuid(),

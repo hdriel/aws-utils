@@ -17,7 +17,7 @@ import { AWSCredentials } from '../types/aws.ts';
 import '../styles/login.scss';
 
 interface LoginScreenProps {
-    onLoginSuccess: (bucketName: string) => void;
+    onLoginSuccess: (bucketName: string, localstack: boolean) => void;
 }
 
 const awsRegions = [
@@ -68,7 +68,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     });
     const [bucketName, setBucketName] = useState('demo');
     const [isPublicAccess, setIsPublicAccess] = useState(true);
-    const [isUseLocalstack, setIsUseLocalstack] = useState(true);
+    const [isLocalstack, setIsLocalstack] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string[]>([]);
     const [success, setSuccess] = useState(false);
@@ -96,13 +96,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setSuccess(false);
 
         try {
-            await s3Service.initialize(credentials, bucketName, isPublicAccess, isUseLocalstack);
+            await s3Service.initialize(credentials, bucketName, isPublicAccess, isLocalstack);
             const isConnected = await s3Service.testConnection();
 
             if (isConnected) {
                 setSuccess(true);
                 setTimeout(() => {
-                    onLoginSuccess(bucketName);
+                    onLoginSuccess(bucketName, isLocalstack);
                 }, 500);
             } else {
                 setError(['Failed to connect.', 'Please check your credentials and bucket name.']);
@@ -176,7 +176,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         onChange={handleChange('region')}
                         className="form-field"
                         required
-                        disabled={loading || isUseLocalstack}
+                        disabled={loading || isLocalstack}
                         options={awsRegions.map((option) => ({ ...option, subtitle: option.value }))}
                     />
 
@@ -207,9 +207,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     <Checkbox
                         color="primary"
                         label={'Localstack'}
-                        checked={isUseLocalstack}
+                        checked={isLocalstack}
                         onChange={(e) => {
-                            setIsUseLocalstack(e.target.checked);
+                            setIsLocalstack(e.target.checked);
                             if (e.target.checked) {
                                 setCredentials({
                                     accessKeyId: import.meta.env.VITE_LOCALSTACK_ACCESS_KEY_ID ?? '',

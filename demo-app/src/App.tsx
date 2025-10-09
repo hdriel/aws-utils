@@ -21,10 +21,12 @@ const theme = createTheme({
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [bucketName, setBucketName] = useState('');
+    const [isLocalstack, setIsLocalstack] = useState(false);
 
-    const handleLoginSuccess = (bucket: string) => {
+    const handleLoginSuccess = (bucket: string, localstack: boolean) => {
         setBucketName(bucket);
         setIsAuthenticated(true);
+        setIsLocalstack(localstack);
     };
 
     const handleLogout = () => {
@@ -36,7 +38,7 @@ function App() {
         <ThemeProvider theme={theme}>
             <CssBaseline />
             {isAuthenticated ? (
-                <MainScreen bucketName={bucketName} onLogout={handleLogout} />
+                <MainScreen bucketName={bucketName} localstack={isLocalstack} onLogout={handleLogout} />
             ) : (
                 <LoginScreen onLoginSuccess={handleLoginSuccess} />
             )}

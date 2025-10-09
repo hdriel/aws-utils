@@ -5,50 +5,62 @@ import { TreeView, Button, Typography, InputText, Dialog, TreeViewNodeProps, SVG
 import { s3Service } from '../services/s3Service';
 import '../styles/treeView.scss';
 import { AwsTreeItem } from '../types/ui';
-import { getFileIcon } from '../utils/fileUtils.ts';
+import { formatFileSize, getFileIcon } from '../utils/fileUtils.ts';
+import { ListObjectsOutput, S3ResponseFile } from '../types/aws.ts';
 
-// const renderTree = (nodes: undefined | TreeNode[]): any => {
-//     return (
-//         nodes?.map((node) => ({
-//             ...node,
-//             label: (
-//                 <Box className="item-info">
-//                     <Box className="item-icon">
-//                         {node.type === 'folder' ? (
-//                             expanded.includes(node.id) ? (
-//                                 <FolderOpen fontSize="small" />
-//                             ) : (
-//                                 <Folder fontSize="small" />
-//                             )
-//                         ) : (
-//                             <InsertDriveFile fontSize="small" />
-//                         )}
-//                     </Box>
-//                     <Typography className="item-name">{node.label}</Typography>
-//                     {node.type === 'file' && node.size !== undefined && (
-//                         <Typography className="item-size">{formatFileSize(node.size)}</Typography>
-//                     )}
-//                 </Box>
-//             ) as any,
-//             children: renderTree(node.children),
-//         })) ?? []
-//     );
-// };
+const CustomNodeItem: React.FC<any> = (props) => {
+    const { nodeId, isExpandedId, ...node } = props ?? {};
+
+    const connector = node.level === 0 ? '' : node.isLast ? '└─ ' : '├─ ';
+    const currentPrefix = node.level === 0 ? '' : connector;
+    // const childPrefix = node.level === 0 ? '' : prefix + (node.isLast ? '   ' : '│  ');
+
+    return (
+        <Box className="item-info" key={nodeId}>
+            <Typography
+                component="span"
+                sx={{
+                    fontFamily: 'monospace',
+                    color: 'text.secondary',
+                    whiteSpace: 'pre',
+                    userSelect: 'none',
+                }}
+            >
+                {currentPrefix ?? ''}
+            </Typography>
+            <Box className="item-icon">
+                {node.directory ? (
+                    <SVGIcon muiIconName={isExpandedId(node.id) ? 'FolderOpen' : 'Folder'} />
+                ) : (
+                    <SVGIcon muiIconName={getFileIcon(node.directory ? undefined : node.name)} />
+                )}
+            </Box>
+            <Typography className="item-name">{node.label}</Typography>
+            {!node.directory && node.size !== undefined && (
+                <Typography className="item-size">{formatFileSize(node.size)}</Typography>
+            )}
+        </Box>
+    );
+};
 
 interface TreePanelProps {
     onFolderSelect: (path: string) => void;
     onRefresh: () => void;
     bucketName: string;
     refreshTrigger: number;
+    localstack: boolean;
 }
 interface TreeNodeItem extends TreeViewNodeProps {
     directory: boolean;
+    prefix?: string;
     path: string;
     name: string;
+    size: number;
+    level: number;
     children: TreeNodeItem[];
 }
 
-function buildTreeData(root: AwsTreeItem, level = 0, isLast = true, prefix = ''): TreeNodeItem | null {
+function buildTreeData(root: AwsTreeItem, level = 0): TreeNodeItem | null {
     if (!root) return null;
 
     // Build the tree connector lines
@@ -61,41 +73,62 @@ function buildTreeData(root: AwsTreeItem, level = 0, isLast = true, prefix = '')
         │  └─ 📄 file3.txt
         └─ 📄 readme.md
      */
-    const connector = level === 0 ? '' : isLast ? '└─ ' : '├─ ';
-    const currentPrefix = level === 0 ? '' : prefix + connector;
-    const childPrefix = level === 0 ? '' : prefix + (isLast ? '   ' : '│  ');
 
     return {
         id: uuidv4(),
+        level,
         path: root.path,
-        label: (
-            <Box display="flex" alignItems="center" gap={1}>
-                <Typography
-                    component="span"
-                    sx={{
-                        fontFamily: 'monospace',
-                        color: 'text.secondary',
-                        whiteSpace: 'pre',
-                        userSelect: 'none',
-                    }}
-                >
-                    {currentPrefix}
-                </Typography>
-                <SVGIcon muiIconName={getFileIcon(root.name, root.type === 'directory')} />
-                <Typography>{root.name}</Typography>
-            </Box>
-        ) as any,
         name: root.name,
+        label: root.name,
+        size: root.size,
         directory: root.type === 'directory',
-        children: root.children
-            ?.map((node, index, array) => buildTreeData(node, level + 1, index === array.length - 1, childPrefix))
-            .filter((v) => v) as TreeNodeItem[],
+        children: root.children?.map((node) => buildTreeData(node, level + 1)).filter((v) => v) as TreeNodeItem[],
     };
 }
 
-export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger }) => {
+const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): AwsTreeItem => {
+    const { files, directories } = result;
+    const children: AwsTreeItem[] = [];
+
+    directories.forEach((path: string) => {
+        const name =
+            path
+                .split('/')
+                .filter((p) => p)
+                .pop() || path;
+
+        children.push({
+            name,
+            path,
+            size: 0,
+            type: 'directory',
+            children: [],
+        });
+    });
+
+    // Add files
+    files.forEach((file: S3ResponseFile) => {
+        children.push({
+            name: file.Name,
+            path: file.Key,
+            size: file.Size,
+            type: 'file',
+            children: [],
+        });
+    });
+
+    return {
+        name: basePath || 'root',
+        path: basePath || '/',
+        type: 'directory',
+        size: 0,
+        children,
+    };
+};
+
+export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
     const [treeData, setTreeData] = useState<TreeNodeItem | null>(null);
-    // const [expanded, setExpanded] = useState<string[]>(['root']);
+    const [expanded, setExpanded] = useState<string[]>(['root']);
     const [selected, setSelected] = useState<string>('root');
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -108,11 +141,22 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
 
     const loadRootFiles = async () => {
         try {
-            const root = await s3Service.treeObjects();
-            const data = buildTreeData(root);
-            if (!data) return;
+            if (localstack) {
+                const root = await s3Service.treeObjects();
+                const data = buildTreeData(root);
+                if (!data) return;
 
-            setTreeData(data);
+                data.id = 'root';
+                setTreeData(data);
+            } else {
+                const result = await s3Service.listObjects();
+                const nodeData = buildTreeFromFiles(result);
+                const data = buildTreeData(nodeData);
+                if (!data) return;
+
+                data.id = 'root';
+                setTreeData(data);
+            }
         } catch (error) {
             console.error('Failed to load files:', error);
         }
@@ -125,6 +169,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         while (stack.length) {
             const currNode = stack.shift();
             if (!currNode) break;
+
             if (currNode.id === nodeId) {
                 return currNode;
             }
@@ -141,46 +186,58 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         return selected ? findNodeById(treeData, selected) : null;
     }, [selected]);
 
-    // const handleNodeToggle = async (nodeId: string) => {
-    //     if (expanded.includes(nodeId)) {
-    //         setExpanded(expanded.filter((id) => id !== nodeId));
-    //     } else {
-    //         setExpanded([...expanded, nodeId]);
-    //
-    //         const node = findNodeById(treeData, nodeId);
-    //         if (node && node.type === 'directory' && (!node.children || node.children.length === 0)) {
-    //             try {
-    //                 // const files = await s3Service.listObjects(node.path);
-    //                 // const children = buildTreeFromFiles(files);
-    //                 // updateNodeChildren(nodeId, children);
-    //             } catch (error) {
-    //                 console.error('Failed to load folder contents:', error);
-    //             }
-    //         }
-    //     }
-    // };
-    //
+    const handleNodeToggle = async (nodeId: string) => {
+        if (expanded.includes(nodeId)) {
+            setExpanded(expanded.filter((id) => id !== nodeId));
+        } else {
+            setExpanded([...expanded, nodeId]);
 
-    //
-    // const updateNodeChildren = (nodeId: string, children: TreeItem[]) => {
-    //     const updateNodes = (nodes: TreeItem[]): TreeItem[] => {
-    //         return nodes.map((node) => {
-    //             if (node.path === nodeId) {
-    //                 return { ...node, children };
-    //             }
-    //             if (node.children) {
-    //                 return { ...node, children: updateNodes(node.children) };
-    //             }
-    //             return node;
-    //         });
-    //     };
-    //
-    //     if (treeData) {
-    //         const result = updateNodes([treeData]);
-    //         setTreeData(result[0]);
-    //     }
-    // };
-    //
+            if (!localstack) {
+                const node = findNodeById(treeData, nodeId) as TreeNodeItem;
+                if (node && node.directory && (!node.children || node.children.length === 0)) {
+                    try {
+                        const result = await s3Service.listObjects(node.path);
+                        const nodeData = buildTreeFromFiles(result, node.path);
+                        const children = nodeData.children.map(
+                            (currNode) =>
+                                ({
+                                    id: uuidv4(),
+                                    level: node.level + 1,
+                                    path: `${node.path ?? ''}/${currNode.path}`,
+                                    name: currNode.name,
+                                    label: currNode.name,
+                                    size: currNode.size,
+                                    directory: currNode.type === 'directory',
+                                    children: [],
+                                }) as TreeNodeItem
+                        );
+                        updateNodeChildren(nodeId, children);
+                    } catch (error) {
+                        console.error('Failed to load folder contents:', error);
+                    }
+                }
+            }
+        }
+    };
+
+    const updateNodeChildren = (nodeId: string, children: TreeNodeItem[]) => {
+        const updateNodes = (nodes: TreeNodeItem[]): TreeNodeItem[] => {
+            return nodes.map((node) => {
+                if (node.id === nodeId) {
+                    return { ...node, children };
+                }
+                if (node.children) {
+                    return { ...node, children: updateNodes(node.children) };
+                }
+                return node;
+            });
+        };
+
+        if (treeData) {
+            const result = updateNodes([treeData]);
+            setTreeData(result[0]);
+        }
+    };
 
     useEffect(() => {
         if (selectedNode?.path) {
@@ -210,6 +267,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
             setCreateDialogOpen(false);
             setNewFolderName('');
             await loadRootFiles();
+
             onRefresh();
         } catch (error) {
             console.error('Failed to create folder:', error);
@@ -219,7 +277,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
     };
 
     const handleDeleteFolder = async () => {
-        if (selected === 'root') return;
+        if (!selectedNode || selectedNode?.id === 'root') return;
 
         setLoading(true);
         try {
@@ -231,7 +289,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 }
                 setDeleteDialogOpen(false);
                 setSelected('root');
-                loadRootFiles();
+                await loadRootFiles();
                 onRefresh();
             }
         } catch (error) {
@@ -275,19 +333,24 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                 <TreeView
                     collapseIcon={'ExpandMore'}
                     expandIcon={'ChevronRight'}
-                    // expanded={expanded}
-                    selected={selected}
-                    // onExpanded={(nodeIds: string[]) => {
-                    //     const newExpanded = nodeIds;
-                    //     const addedNode = newExpanded.find((id) => !expanded.includes(id));
-                    //     if (addedNode) {
-                    //         return handleNodeToggle(addedNode);
-                    //     }
-                    //     setExpanded(newExpanded);
-                    // }}
-                    onSelected={(nodeIds: string[]) => setSelected(nodeIds[0])}
+                    expandedIds={expanded}
+                    selectedIds={['root']}
+                    fieldId="id"
+                    onExpanded={(nodeIds: string[]) => setExpanded(nodeIds)}
+                    TransitionComponent={null}
+                    onSelected={(nodeIds: string[]) => {
+                        const [nodeId] = nodeIds;
+                        if (nodeId !== selected) {
+                            setSelected(nodeId);
+                            return handleNodeToggle(nodeId);
+                        }
+                    }}
                     nodes={treeData ? [treeData] : undefined}
-                ></TreeView>
+                    externalItemProps={{
+                        isExpandedId: (nodeId: string) => expanded.includes(nodeId),
+                    }}
+                    CustomComponent={CustomNodeItem as any}
+                />
             </div>
 
             <Dialog
