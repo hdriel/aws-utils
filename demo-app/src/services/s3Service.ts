@@ -236,16 +236,10 @@ class S3Service {
                 signal: this.downloadAbortController.signal,
                 onDownloadProgress: onProgress
                     ? (progressEvent: any) => {
-                          // ✅ Now Content-Length is accurate!
-                          if (progressEvent.total && progressEvent.total > 0) {
-                              const percentage = (progressEvent.loaded / progressEvent.total) * 100;
-                              onProgress(Math.min(percentage, 100));
-                          } else {
-                              // Fallback for chunked encoding
-                              const mb = (progressEvent.loaded / (1024 * 1024)).toFixed(2);
-                              console.log(`Downloaded: ${mb} MB`);
-                              onProgress(50); // Indeterminate
-                          }
+                          const percentage = progressEvent.total
+                              ? (progressEvent.loaded / progressEvent.total) * 100
+                              : 0;
+                          onProgress(percentage);
                       }
                     : undefined,
             });
