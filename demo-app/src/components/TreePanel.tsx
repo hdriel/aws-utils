@@ -316,10 +316,10 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                     await s3Service.deleteObject(nodeAction.path);
                 }
                 setDeleteDialogOpen(false);
-                debugger;
 
                 if (!localstack) {
-                    await loadNodeFiles(nodeAction.id);
+                    setSelected(nodeAction.id);
+                    return handleNodeToggle(nodeAction.id);
                 } else {
                     setSelected('root');
                     await loadRootFiles();
