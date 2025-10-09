@@ -195,6 +195,46 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
         return selected ? findNodeById(treeData, selected) : null;
     }, [selected]);
 
+    const loadNodeFiles = async (nodeId: string) => {
+        const node = findNodeById(treeData, nodeId) as TreeNodeItem;
+        if (node && node.directory && (!node.children || node.children.length === 0)) {
+            try {
+                const result = await s3Service.listObjects(node.path);
+
+                const nodeData = buildTreeFromFiles(result, node.path);
+                const children = nodeData.children.map((currNode, index, arr) => {
+                    const currNodeId = uuidv4();
+                    const currNodePath =
+                        currNode.type === 'file' ? currNode.path : `${node.path ?? ''}/${currNode.path}`;
+                    const label = buildNodeLabel(currNode, nodeId, currNodePath);
+
+                    return {
+                        id: currNodeId,
+                        level: node.level + 1,
+                        path: currNodePath,
+                        name: currNode.name,
+                        label,
+                        size: currNode.size,
+                        directory: currNode.type === 'directory',
+                        children: [],
+                        sx: {
+                            ...((currNode.type === 'file' || !currNode.name) && {
+                                '& .MuiTreeItem-label': { marginLeft: '-5px' },
+                                '& .MuiTreeItem-iconContainer': { display: 'none' },
+                            }),
+                        },
+                        index,
+                        isLast: index === arr.length - 1,
+                    } as TreeNodeItem;
+                });
+
+                updateNodeChildren(nodeId, children);
+            } catch (error) {
+                console.error('Failed to load folder contents:', error);
+            }
+        }
+    };
+
     const handleNodeToggle = async (nodeId: string) => {
         if (expanded.includes(nodeId)) {
             setExpanded(expanded.filter((id) => id !== nodeId));
@@ -202,43 +242,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
             setExpanded([...expanded, nodeId]);
 
             if (!localstack) {
-                const node = findNodeById(treeData, nodeId) as TreeNodeItem;
-                if (node && node.directory && (!node.children || node.children.length === 0)) {
-                    try {
-                        const result = await s3Service.listObjects(node.path);
-
-                        const nodeData = buildTreeFromFiles(result, node.path);
-                        const children = nodeData.children.map((currNode, index, arr) => {
-                            const currNodeId = uuidv4();
-                            const currNodePath =
-                                currNode.type === 'file' ? currNode.path : `${node.path ?? ''}/${currNode.path}`;
-                            const label = buildNodeLabel(currNode, nodeId, currNodePath);
-
-                            return {
-                                id: currNodeId,
-                                level: node.level + 1,
-                                path: currNodePath,
-                                name: currNode.name,
-                                label,
-                                size: currNode.size,
-                                directory: currNode.type === 'directory',
-                                children: [],
-                                sx: {
-                                    ...((currNode.type === 'file' || !currNode.name) && {
-                                        '& .MuiTreeItem-label': { marginLeft: '-5px' },
-                                        '& .MuiTreeItem-iconContainer': { display: 'none' },
-                                    }),
-                                },
-                                index,
-                                isLast: index === arr.length - 1,
-                            } as TreeNodeItem;
-                        });
-
-                        updateNodeChildren(nodeId, children);
-                    } catch (error) {
-                        console.error('Failed to load folder contents:', error);
-                    }
-                }
+                return loadNodeFiles(nodeId);
             }
         }
     };
@@ -312,8 +316,15 @@ export const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh,
                     await s3Service.deleteObject(nodeAction.path);
                 }
                 setDeleteDialogOpen(false);
-                setSelected('root');
-                await loadRootFiles();
+                debugger;
+
+                if (!localstack) {
+                    await loadNodeFiles(nodeAction.id);
+                } else {
+                    setSelected('root');
+                    await loadRootFiles();
+                }
+
                 onRefresh();
             }
         } catch (error) {

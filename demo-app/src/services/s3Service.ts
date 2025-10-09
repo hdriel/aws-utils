@@ -69,7 +69,6 @@ class S3Service {
             const query = qs.stringify({ ...(directory && { directory: encodeURIComponent(directory) }) });
             const { data: response } = await this.api.get(`/directories?${query}`);
 
-            console.log('listObjects', directory, response);
             return response;
         } catch (error) {
             console.error('Failed to list objects:', error);
