@@ -62,7 +62,7 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstac
                             onFolderSelect={setCurrentPath}
                             onRefresh={handleRefresh}
                             refreshTrigger={refreshTrigger}
-                            localstack={!localstack}
+                            localstack={localstack}
                         />
                     </Panel>
                     <PanelResizeHandle />
