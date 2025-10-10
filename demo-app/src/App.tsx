@@ -36,10 +36,18 @@ function App() {
         s3Service
             .isConnected()
             .then((bucketInfo) => {
-                setIsAuthenticated(!!bucketInfo);
-                setBucketName(bucketInfo.name);
+                if (bucketInfo) {
+                    setIsAuthenticated(!!bucketInfo);
+                    setBucketName(bucketInfo.name);
+                    const localstack = !!+(localStorage.getItem('localstack') ?? '0');
+                    setIsLocalstack(localstack);
+                } else {
+                    localStorage.removeItem('localstack');
+                }
             })
-            .catch(() => {})
+            .catch(() => {
+                localStorage.removeItem('localstack');
+            })
             .finally(() => {
                 setIsLoading(false);
             });

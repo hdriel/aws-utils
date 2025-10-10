@@ -100,6 +100,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             const isConnected = await s3Service.isConnected();
 
             if (isConnected) {
+                localStorage.setItem('localstack', isLocalstack ? '1' : '0');
                 setSuccess(true);
                 setTimeout(() => {
                     onLoginSuccess(bucketName, isLocalstack);

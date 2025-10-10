@@ -575,10 +575,7 @@ export class S3BucketUtil {
         directories: string[];
         files: ContentFile[];
     }> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
-        if (!normalizedPath) {
-            throw new Error('No directory path provided');
-        }
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '') ?? '';
 
         const command = new ListObjectsV2Command({
             Bucket: this.bucket,
@@ -622,10 +619,7 @@ export class S3BucketUtil {
         directories: string[];
         files: Array<ContentFile & { key: string; fullPath: string }>;
     }> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
-        if (!normalizedPath) {
-            throw new Error('No directory path provided');
-        }
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '') ?? '';
 
         const allDirectories: string[] = [];
         const allFiles: Array<ContentFile & { key: string; fullPath: string }> = [];
@@ -707,10 +701,8 @@ export class S3BucketUtil {
         lastModified?: Date;
         children?: Array<any>;
     }> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
-        if (!normalizedPath) {
-            throw new Error('No directory path provided');
-        }
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '') ?? '';
+
         const directory = directoryPath?.split('/').pop();
 
         const { directories, files } = await this.directoryList(directoryPath);
@@ -756,7 +748,9 @@ export class S3BucketUtil {
 
     async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
         const directoryPrefix = directoryPath?.endsWith('/') ? directoryPath : directoryPath ? `${directoryPath}/` : '';
+
         const prefix = directoryPrefix + (fileNamePrefix || '');
+        this.logger?.debug(null, 'file list info', { prefix, directoryPrefix, directoryPath, fileNamePrefix });
 
         const command = new ListObjectsCommand({
             Bucket: this.bucket,

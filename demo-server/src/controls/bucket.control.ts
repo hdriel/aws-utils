@@ -10,6 +10,11 @@ export const getBucketListCtrl = async (_req: Request, res: Response, _next: Nex
 
 export const getBucketInfoCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const result = await s3BucketUtil.bucketInfo();
 
     res.json(result);

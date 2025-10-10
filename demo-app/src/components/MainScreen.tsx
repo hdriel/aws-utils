@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box } from '@mui/material';
-import { Button, Typography, SVGIcon } from 'mui-simple';
+import { Button, Typography, SVGIcon, Chip } from 'mui-simple';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
 import TreePanel from './TreePanel';
@@ -35,6 +35,9 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstac
                     <Box>
                         <Typography variant="h6" component="h1" color={'#ececec'}>
                             AWS S3 File Explorer
+                            {localstack && (
+                                <Chip label="localstack" color="secondary" sx={{ marginInlineStart: '1em' }} />
+                            )}
                         </Typography>
                         <Typography variant="caption" className="bucket-info" color={'#ececec'}>
                             Bucket: {bucketName}
