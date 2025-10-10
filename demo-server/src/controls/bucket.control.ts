@@ -8,6 +8,13 @@ export const getBucketListCtrl = async (_req: Request, res: Response, _next: Nex
     res.json(result);
 };
 
+export const getBucketInfoCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
+    const s3BucketUtil = getS3BucketUtil();
+    const result = await s3BucketUtil.bucketInfo();
+
+    res.json(result);
+};
+
 export const getBucketDirectoryTreeCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
     const result = await s3BucketUtil.directoryTree();

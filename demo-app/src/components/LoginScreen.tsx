@@ -97,7 +97,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         try {
             await s3Service.initialize(credentials, bucketName, isPublicAccess, isLocalstack);
-            const isConnected = await s3Service.testConnection();
+            const isConnected = await s3Service.isConnected();
 
             if (isConnected) {
                 setSuccess(true);

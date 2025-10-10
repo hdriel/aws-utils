@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import LoginScreen from './components/LoginScreen';
 import MainScreen from './components/MainScreen';
+import { s3Service } from './services/s3Service.ts';
 
 const theme = createTheme({
     palette: {
@@ -15,6 +16,7 @@ const theme = createTheme({
 });
 
 function App() {
+    const [loading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [bucketName, setBucketName] = useState('');
     const [isLocalstack, setIsLocalstack] = useState(false);
@@ -30,7 +32,20 @@ function App() {
         setBucketName('');
     };
 
-    return (
+    useEffect(() => {
+        s3Service
+            .isConnected()
+            .then((bucketInfo) => {
+                setIsAuthenticated(!!bucketInfo);
+                setBucketName(bucketInfo.name);
+            })
+            .catch(() => {})
+            .finally(() => {
+                setIsLoading(false);
+            });
+    }, []);
+
+    return loading ? null : (
         <ThemeProvider theme={theme}>
             <CssBaseline />
             {isAuthenticated ? (

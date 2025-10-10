@@ -26,6 +26,12 @@ import {
     PutBucketPolicyCommand,
     type CreateBucketCommandOutput,
     ListBucketsCommand,
+    type HeadBucketCommandInput,
+    GetBucketPolicyCommand,
+    GetBucketVersioningCommand,
+    GetBucketEncryptionCommand,
+    GetPublicAccessBlockCommand,
+    GetBucketAclCommand,
     type ListBucketsCommandInput,
     PutObjectCommand,
     HeadObjectCommand,
@@ -49,6 +55,11 @@ import {
     type ListObjectsV2CommandOutput,
     DeleteObjectsCommand,
     type DeleteObjectsCommandOutput,
+    type GetBucketAclCommandOutput,
+    type GetPublicAccessBlockCommandOutput,
+    type GetBucketPolicyCommandOutput,
+    type GetBucketVersioningCommandOutput,
+    type GetBucketEncryptionCommandOutput,
 } from '@aws-sdk/client-s3';
 import { ACLs } from '../utils/consts';
 import { s3Limiter } from '../utils/concurrency';
@@ -168,7 +179,7 @@ export class S3BucketUtil {
         return response?.Buckets || null;
     }
 
-    async isExistsBucket(): Promise<boolean> {
+    async isBucketExists(): Promise<boolean> {
         const bucketName = this.bucket;
 
         try {
@@ -187,7 +198,7 @@ export class S3BucketUtil {
     private async initAsPublicBucket(): Promise<CreateBucketCommandOutput | undefined> {
         const bucketName = this.bucket;
 
-        const isExists = await this.isExistsBucket();
+        const isExists = await this.isBucketExists();
         if (isExists) {
             this.logger?.info(this.reqId, `Bucket already exists.`, { bucketName });
             return;
@@ -235,7 +246,7 @@ export class S3BucketUtil {
     ): Promise<CreateBucketCommandOutput | undefined> {
         const bucketName = this.bucket;
 
-        const isExists = await this.isExistsBucket();
+        const isExists = await this.isBucketExists();
         if (isExists) {
             this.logger?.info(this.reqId, `Bucket already exists.`, { bucketName });
             return;
@@ -260,7 +271,7 @@ export class S3BucketUtil {
     ): Promise<CreateBucketCommandOutput | undefined> {
         const bucketName = this.bucket;
 
-        const isExists = await this.isExistsBucket();
+        const isExists = await this.isBucketExists();
         if (isExists) {
             this.logger?.info(this.reqId, `Bucket already exists.`, { bucketName });
             return;
@@ -298,12 +309,162 @@ export class S3BucketUtil {
         } while (ContinuationToken);
     }
 
+    async bucketInfo(options?: Partial<HeadBucketCommandInput>): Promise<{
+        name: string;
+        region: string;
+        endpoint: string;
+        exists: boolean;
+        bucketRegion?: string;
+        accessPointAlias?: boolean;
+        creationDate?: Date;
+        acl?: Array<{
+            grantee?: string;
+            permission?: string;
+        }>;
+        publicAccessBlock?: {
+            BlockPublicAcls?: boolean;
+            IgnorePublicAcls?: boolean;
+            BlockPublicPolicy?: boolean;
+            RestrictPublicBuckets?: boolean;
+        };
+        policy?: any;
+        versioning?: string;
+        encryption?: {
+            enabled: boolean;
+            type?: string;
+        };
+    }> {
+        const bucketName = this.bucket;
+        const info: any = {
+            name: bucketName,
+            region: this.region,
+            endpoint: this.endpoint,
+            exists: false,
+        };
+
+        try {
+            try {
+                const headBucketResponse = await this.execute<HeadBucketCommandOutput>(
+                    new HeadBucketCommand({ Bucket: bucketName, ...options })
+                );
+                this.logger?.debug('bucketInfo', 'HeadBucketCommandOutput', headBucketResponse);
+
+                info.exists = true;
+                info.bucketRegion = headBucketResponse.BucketRegion;
+                info.accessPointAlias = headBucketResponse.AccessPointAlias;
+            } catch (err: any) {
+                if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+                    return info;
+                }
+
+                throw err;
+            }
+
+            // Get bucket creation date from list
+            try {
+                const buckets = await this.getBucketList({ Prefix: this.bucket, BucketRegion: this.region });
+                this.logger?.debug('bucketInfo', 'getBucketList', { buckets });
+
+                const bucket = buckets?.find((b) => b.Name === bucketName);
+                if (bucket?.CreationDate) {
+                    info.creationDate = bucket.CreationDate;
+                }
+            } catch (error) {
+                this.logger?.warn(this.reqId, 'Failed to get bucket creation date', { bucketName, error });
+            }
+
+            try {
+                const aclResponse = await this.execute<GetBucketAclCommandOutput>(
+                    new GetBucketAclCommand({ Bucket: bucketName })
+                );
+                this.logger?.debug('bucketInfo', 'GetBucketAclCommandOutput', aclResponse);
+
+                info.acl = aclResponse.Grants?.map((grant: any) => ({
+                    grantee: grant.Grantee?.Type,
+                    permission: grant.Permission,
+                }));
+            } catch (error) {
+                this.logger?.warn(this.reqId, 'Failed to get bucket ACL', { bucketName, error });
+            }
+
+            // Get public access block configuration
+            try {
+                const publicAccessResponse = await this.execute<GetPublicAccessBlockCommandOutput>(
+                    new GetPublicAccessBlockCommand({ Bucket: bucketName })
+                );
+                this.logger?.debug('bucketInfo', 'GetPublicAccessBlockCommandOutput', publicAccessResponse);
+
+                info.publicAccessBlock = publicAccessResponse.PublicAccessBlockConfiguration;
+            } catch (error: any) {
+                if (error.name !== 'NoSuchPublicAccessBlockConfiguration') {
+                    this.logger?.warn(this.reqId, 'Failed to get public access block', { bucketName, error });
+                }
+            }
+
+            // Get bucket policy
+            try {
+                const policyResponse = await this.execute<GetBucketPolicyCommandOutput>(
+                    new GetBucketPolicyCommand({ Bucket: bucketName })
+                );
+                this.logger?.debug('bucketInfo', 'GetBucketPolicyCommandOutput', policyResponse);
+
+                if (policyResponse.Policy) {
+                    info.policy = JSON.parse(policyResponse.Policy);
+                }
+            } catch (error: any) {
+                if (error.name !== 'NoSuchBucketPolicy') {
+                    this.logger?.warn(this.reqId, 'Failed to get bucket policy', { bucketName, error });
+                }
+            }
+
+            // Get versioning status
+            try {
+                const versioningResponse = await this.execute<GetBucketVersioningCommandOutput>(
+                    new GetBucketVersioningCommand({ Bucket: bucketName })
+                );
+                this.logger?.debug('bucketInfo', 'GetBucketVersioningCommandOutput', versioningResponse);
+
+                info.versioning = versioningResponse.Status || 'Disabled';
+            } catch (error) {
+                this.logger?.warn(this.reqId, 'Failed to get bucket versioning', { bucketName, error });
+            }
+
+            // Get encryption configuration
+            try {
+                const encryptionResponse = await this.execute<GetBucketEncryptionCommandOutput>(
+                    new GetBucketEncryptionCommand({ Bucket: bucketName })
+                );
+                this.logger?.debug('bucketInfo', 'GetBucketEncryptionCommandOutput', encryptionResponse);
+
+                info.encryption = {
+                    enabled: true,
+                    type: encryptionResponse.ServerSideEncryptionConfiguration?.Rules?.[0]
+                        ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+                };
+            } catch (error: any) {
+                if (error.name === 'ServerSideEncryptionConfigurationNotFoundError') {
+                    info.encryption = { enabled: false };
+                } else {
+                    this.logger?.warn(this.reqId, 'Failed to get bucket encryption', { bucketName, error });
+                    info.encryption = { enabled: false };
+                }
+            }
+
+            this.logger?.debug('bucketInfo', 'bucket info response', info);
+
+            return info;
+        } catch (error) {
+            this.logger?.error(this.reqId, 'Failed to get bucket info', { bucketName, error });
+            throw error;
+        }
+    }
+
     async destroyBucket(
         forceDeleteAllFilesBeforeDestroyBucket = false
     ): Promise<DeleteBucketCommandOutput | undefined> {
         const bucketName = this.bucket;
 
-        const isExists = await this.isExistsBucket();
+        const isExists = await this.isBucketExists();
         if (!isExists) {
             this.logger?.debug(this.reqId, `Bucket not exists.`, { bucketName });
             return;
@@ -322,14 +483,21 @@ export class S3BucketUtil {
     // ##### DIRECTORY BLOCK ##########################
 
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
-        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        if (!normalizedPath) {
+            throw new Error('No directory path provided');
+        }
+
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: normalizedPath });
 
         return await this.execute<PutObjectCommandOutput>(command);
     }
 
     async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
-        const normalizedPath = directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`;
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        if (!normalizedPath) {
+            throw new Error('No directory path provided');
+        }
 
         let totalDeletedCount = 0;
         let ContinuationToken: string | undefined = undefined;
@@ -407,7 +575,10 @@ export class S3BucketUtil {
         directories: string[];
         files: ContentFile[];
     }> {
-        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        if (!normalizedPath) {
+            throw new Error('No directory path provided');
+        }
 
         const command = new ListObjectsV2Command({
             Bucket: this.bucket,
@@ -451,7 +622,10 @@ export class S3BucketUtil {
         directories: string[];
         files: Array<ContentFile & { key: string; fullPath: string }>;
     }> {
-        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        if (!normalizedPath) {
+            throw new Error('No directory path provided');
+        }
 
         const allDirectories: string[] = [];
         const allFiles: Array<ContentFile & { key: string; fullPath: string }> = [];
@@ -533,7 +707,10 @@ export class S3BucketUtil {
         lastModified?: Date;
         children?: Array<any>;
     }> {
-        const normalizedPath = directoryPath ? (directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`) : '';
+        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        if (!normalizedPath) {
+            throw new Error('No directory path provided');
+        }
         const directory = directoryPath?.split('/').pop();
 
         const { directories, files } = await this.directoryList(directoryPath);
@@ -820,12 +997,6 @@ export class S3BucketUtil {
             return null;
         }
     }
-
-    // ===================================================================
-    // CORRECT SOLUTION: Use Transfer-Encoding: chunked (no Content-Length)
-    // ===================================================================
-
-    // In s3-bucket.ts - Update getStreamZipFileCtr method:
 
     async getStreamZipFileCtr({
         filePath,

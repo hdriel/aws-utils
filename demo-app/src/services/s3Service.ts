@@ -31,10 +31,11 @@ class S3Service {
         });
     }
 
-    async testConnection(): Promise<boolean> {
+    async isConnected(): Promise<any> {
         try {
-            const { data: bucketRoot } = await this.api.get('/buckets');
-            return Array.isArray(bucketRoot);
+            const { data: bucketRoot } = await this.api.get('/buckets/bucket-info');
+
+            return bucketRoot;
         } catch (error) {
             console.error('Connection test failed:', error);
             return false;
