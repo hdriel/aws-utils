@@ -149,7 +149,7 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
         console.log('#'.repeat(20));
         console.log('#### BUCKET SIGNED FILE URL', filePath, '\n');
 
-        const fileURL = await s3BucketUtil.generateSignedFileUrl(filePath);
+        const fileURL = await s3BucketUtil.fileUrl(filePath);
         console.log('File url', fileURL);
 
         console.log('\n' + '='.repeat(25));
