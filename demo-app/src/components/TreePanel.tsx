@@ -198,7 +198,6 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
     const selectedNode = useMemo(() => {
         return selected ? findNodeById(treeData, selected) : null;
     }, [selected]);
-    console.log('selectedNode', selectedNode);
 
     const loadNodeFiles = async (nodeId: string) => {
         const node = findNodeById(treeData, nodeId) as TreeNodeItem;
@@ -344,30 +343,33 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
     return (
         <div className="tree-panel">
             <div className="tree-header">
-                <Typography variant="h6" component="h2">
-                    Files & Folders
-                </Typography>
+                <Box sx={{ minWidth: 'max-content' }}>
+                    <Typography variant="h6" component="h2">
+                        Files & Folders
+                    </Typography>
+                </Box>
+
                 <Box className="tree-actions">
                     <Button
                         variant="outlined"
                         size="small"
-                        startIcon="Add"
+                        icon="AddCircleOutlined"
+                        tooltipProps={{ title: 'New Folder' }}
                         onClick={() => setCreateDialogOpen(true)}
-                        label="New Folder"
                     />
-                    {selectedNode && (
-                        <Button
-                            size="small"
-                            onClick={() => setDeleteDialogOpen(true)}
-                            disabled={!selectedNode?.path}
-                            color="error"
-                            variant="outlined"
-                            sx={{ justifyContent: 'space-between' }}
-                            label={selectedNode?.name}
-                            startIcon={getFileIcon(selectedNode.name, selectedNode.directory)}
-                            endIcon="Delete"
-                        />
-                    )}
+
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        icon="Refresh"
+                        tooltipProps={{ title: 'refresh tree' }}
+                        onClick={() => {
+                            setSelected('');
+                            setTimeout(() => {
+                                loadRootFiles();
+                            }, 500);
+                        }}
+                    />
                 </Box>
             </div>
 
