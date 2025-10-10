@@ -45,7 +45,6 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
         });
     });
 
-    // Add files
     files.forEach((file: S3ResponseFile) => {
         children.push({
             name: file.Name,
@@ -61,16 +60,16 @@ const buildTreeFromFiles = (result: ListObjectsOutput, basePath: string = ''): A
         path: basePath || '/',
         type: 'directory',
         size: 0,
-        children: children.length ? children : [{ name: '', path: '' } as any],
+        children: !basePath || children.length ? children : [{ id: '.', name: '', path: '' } as any],
     };
 };
 
 const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refreshTrigger, localstack }) => {
     const [treeData, setTreeData] = useState<TreeNodeItem | null>(null);
-    const [expanded, setExpanded] = useState<string[]>(['root']);
+    const [expanded, setExpanded] = useState<string[]>([]);
     // @ts-ignore
     const [selectedIds, setSelectedIds] = useState<string[]>(['root']);
-    const [selected, setSelected] = useState<string>('root');
+    const [selected, setSelected] = useState<string>();
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -167,8 +166,9 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                 const data = buildTreeData(nodeData);
                 if (!data) return;
 
-                data.id = 'root';
                 setTreeData(data);
+                setSelected(data.id);
+                setExpanded([data.id]);
             }
         } catch (error) {
             console.error('Failed to load files:', error);
@@ -198,6 +198,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
     const selectedNode = useMemo(() => {
         return selected ? findNodeById(treeData, selected) : null;
     }, [selected]);
+    console.log('selectedNode', selectedNode);
 
     const loadNodeFiles = async (nodeId: string) => {
         const node = findNodeById(treeData, nodeId) as TreeNodeItem;

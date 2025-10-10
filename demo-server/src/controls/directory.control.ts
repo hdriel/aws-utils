@@ -19,14 +19,20 @@ export const getDirectoryFileListCtrl = async (req: Request, res: Response, _nex
 
 export const getDirectoryTreeCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.directoryTree(req.params.directory);
+    const directory = req.query?.directory ? decodeURIComponent(req.query?.directory as string) : undefined;
+    const result = await s3BucketUtil.directoryTree(directory);
 
     res.json(result);
 };
 
-export const createDirectoryCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+export const createDirectoryCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const result = await s3BucketUtil.createDirectory(req.body.directory);
+    const directory = req.body.directory?.replace(/^\//, '').replace(/\/$/, '');
+    if (!directory) {
+        return next(new Error('No directory path provided'));
+    }
+
+    const result = await s3BucketUtil.createDirectory(directory);
 
     res.json(result);
 };
