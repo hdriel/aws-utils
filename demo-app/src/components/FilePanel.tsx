@@ -441,14 +441,6 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                                                 : `Download ${selectedFiles.size > 1 ? 'as ZIP' : ''}`
                                         }
                                     />
-                                    <Button
-                                        variant="outlined"
-                                        fullWidth
-                                        color="error"
-                                        startIcon="Delete"
-                                        onClick={() => setDeleteDialogOpen(true)}
-                                        label="Delete Selected"
-                                    />
 
                                     {selectedFiles.size === 1 && (
                                         <>
@@ -468,6 +460,15 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                                             />
                                         </>
                                     )}
+
+                                    <Button
+                                        variant="outlined"
+                                        fullWidth
+                                        color="error"
+                                        startIcon="Delete"
+                                        onClick={() => setDeleteDialogOpen(true)}
+                                        label="Delete Selected"
+                                    />
                                 </Box>
 
                                 {videoPrivateUrl && (
