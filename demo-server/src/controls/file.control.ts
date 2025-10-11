@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { getS3BucketUtil, type UploadedS3File } from '../shared';
 import logger from '../logger';
+import { extname } from 'path';
 
 export const getFileInfoCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
@@ -118,6 +119,24 @@ export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File },
     };
 
     return uploadMiddleware(req, res, uploadedCallback);
+};
+
+export const viewImageFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {
+    const s3BucketUtil = getS3BucketUtil();
+    const fileKey = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;
+    if (!fileKey) {
+        res.status(404).json({ error: 'file key is required' });
+        return;
+    }
+
+    const imageBuffer = await s3BucketUtil.fileContent(fileKey, 'buffer');
+    const ext = extname(fileKey).slice(1).toLowerCase(); // cut the first dot, '.png' => 'png'
+
+    const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Optional: cache for 1 year
+
+    res.status(200).send(imageBuffer);
 };
 
 export const uploadFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {

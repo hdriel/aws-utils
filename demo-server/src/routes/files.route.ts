@@ -10,6 +10,7 @@ import {
     uploadSingleFileCtrl,
     downloadFilesAsZipCtrl,
     streamVideoFilesCtrl,
+    viewImageFileCtrl,
 } from '../controls/file.control';
 import { logApiMW } from '../middleware/logAPI.mw';
 
@@ -19,6 +20,8 @@ router.use(logApiMW);
 
 router.post('/content', uploadFileDataCtrl);
 router.post('/upload', uploadSingleFileCtrl);
+
+router.get('/image', viewImageFileCtrl);
 
 router.get('/download', downloadFilesAsZipCtrl);
 router.get('/stream', streamVideoFilesCtrl);

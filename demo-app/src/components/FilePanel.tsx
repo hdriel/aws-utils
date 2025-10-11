@@ -238,8 +238,8 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
         navigator.clipboard.writeText(tempLink);
     };
 
-    const fileKey = Array.from(selectedFiles)[0];
-    const file = files?.find((f) => f.key === fileKey);
+    const fileKey = Array.from(selectedFiles)[0] || '';
+    const file = fileKey && files?.find((f) => f.key === fileKey);
     const videoPrivateUrl =
         selectedFiles.size === 1 && file && isVideoFile(file.name)
             ? `${import.meta.env.VITE_SERVER_URL}/files/stream?file=${encodeURIComponent(file.key)}`
@@ -475,6 +475,15 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                                         <video controls src={videoPrivateUrl}>
                                             Your browser does not support the video tag.
                                         </video>
+                                    </Box>
+                                )}
+
+                                {fileKey && isImageFile(fileKey) && (
+                                    <Box className="video-preview" mt={2}>
+                                        <img
+                                            src={`${import.meta.env.VITE_SERVER_URL}/files/image?file=${fileKey}`}
+                                            alt={fileKey}
+                                        />
                                     </Box>
                                 )}
                             </Box>
