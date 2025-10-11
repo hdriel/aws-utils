@@ -497,10 +497,9 @@ export class S3BucketUtil {
     // ##### DIRECTORY BLOCK ##########################
 
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
-        const normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedPath) {
-            throw new Error('No directory path provided');
-        }
+        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedPath) throw new Error('No directory path provided');
+        if (normalizedPath === '/') normalizedPath = '';
 
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: `${normalizedPath}/` });
         const result = await this.execute<PutObjectCommandOutput>(command);
@@ -509,10 +508,11 @@ export class S3BucketUtil {
     }
 
     async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
-        const normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
         if (!normalizedPath) {
             throw new Error('No directory path provided');
         }
+        if (normalizedPath === '/') normalizedPath = '';
 
         let totalDeletedCount = 0;
         let ContinuationToken: string | undefined = undefined;
@@ -1430,6 +1430,7 @@ export class S3BucketUtil {
     ): Multer {
         let normalizedPath = decodeURIComponent(directory?.replace(/^\//, '').replace(/\/$/, '') || '');
         if (directory !== '/' && directory !== '' && directory !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const fileSize = this.getFileSize(maxFileSize);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
