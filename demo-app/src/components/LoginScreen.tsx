@@ -148,7 +148,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         value={credentials.accessKeyId}
                         onChange={handleChange('accessKeyId')}
                         onKeyUp={handleKeyPress}
-                        disabled={loading}
+                        disabled={loading || isLocalstack}
                         className="form-field"
                         required
                     />
@@ -161,7 +161,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         value={credentials.secretAccessKey}
                         onChange={handleChange('secretAccessKey')}
                         onKeyUp={handleKeyPress}
-                        disabled={loading}
+                        disabled={loading || isLocalstack}
                         className="form-field"
                         required
                         generateRandomAction={false}
