@@ -65,7 +65,7 @@ export const toggingFileVersionCtrl = async (req: Request, res: Response, next: 
 
 export const deleteFileCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
+    const filePath = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
     }

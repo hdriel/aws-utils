@@ -151,7 +151,7 @@ class S3Service {
 
     async deleteObject(filePath: string): Promise<void> {
         try {
-            const query = qs.stringify({ filePath: encodeURIComponent(filePath) });
+            const query = qs.stringify({ file: encodeURIComponent(filePath) });
             const { data: response } = await this.api.delete(`/files?${query}`);
 
             await response;

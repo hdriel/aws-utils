@@ -744,10 +744,12 @@ export class S3BucketUtil {
     // ##### FILES BLOCK ##########################
 
     async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
-        const command = new HeadObjectCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-        });
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
+        const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
 
         return await this.execute<HeadObjectCommandOutput>(command);
     }
@@ -786,9 +788,14 @@ export class S3BucketUtil {
 
     async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {
         try {
+            const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+            if (!normalizedKey || normalizedKey === '/') {
+                throw new Error('No file key provided');
+            }
+
             const command = new PutObjectTaggingCommand({
                 Bucket: this.bucket,
-                Key: filePath,
+                Key: normalizedKey,
                 Tagging: { TagSet: [{ Key: 'version', Value: tagVersion }] },
             });
 
@@ -801,11 +808,12 @@ export class S3BucketUtil {
     }
 
     async fileVersion(filePath: string): Promise<string> {
-        const command = new GetObjectTaggingCommand({
-            Bucket: this.bucket,
-            Key: filePath,
-        });
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
 
+        const command = new GetObjectTaggingCommand({ Bucket: this.bucket, Key: normalizedKey });
         const result = await this.execute<GetObjectTaggingCommandOutput>(command);
 
         const tag = result.TagSet?.find((tag) => tag.Key === 'version');
@@ -814,20 +822,30 @@ export class S3BucketUtil {
     }
 
     async fileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
         const expiresInSeconds = typeof expiresIn === 'number' ? expiresIn : ms(expiresIn) / 1000;
 
-        const command = new GetObjectCommand({ Bucket: this.bucket, Key: filePath });
+        const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         const url = await getSignedUrl(this.s3Client, command, {
             expiresIn: expiresInSeconds, // is using 3600 it's will expire in 1 hour (default is 900 seconds = 15 minutes)
         });
 
-        this.logger?.info(null, 'generate signed file url', { url, filePath, expiresIn });
+        this.logger?.info(null, 'generate signed file url', { url, filePath: normalizedKey, expiresIn });
         return url;
     }
 
     async sizeOf(filePath: string, unit: 'bytes' | 'KB' | 'MB' | 'GB' = 'bytes'): Promise<number> {
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
         try {
-            const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
+            const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
             const headObject = await this.execute<HeadObjectCommandOutput>(command);
             const bytes = headObject.ContentLength ?? 0;
 
@@ -843,7 +861,7 @@ export class S3BucketUtil {
             }
         } catch (error: any) {
             if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-                this.logger?.warn(this.reqId, 'File not found', { filePath });
+                this.logger?.warn(this.reqId, 'File not found', { filePath: normalizedKey });
                 return 0;
             }
             throw error;
@@ -852,7 +870,12 @@ export class S3BucketUtil {
 
     async fileExists(filePath: string): Promise<boolean> {
         try {
-            const command = new HeadObjectCommand({ Bucket: this.bucket, Key: filePath });
+            const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+            if (!normalizedKey || normalizedKey === '/') {
+                throw new Error('No file key provided');
+            }
+
+            const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
             await this.execute<HeadObjectCommandOutput>(command);
 
             return true;
@@ -866,7 +889,12 @@ export class S3BucketUtil {
     }
 
     async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
-        const command = new GetObjectCommand({ Bucket: this.bucket, Key: filePath });
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
+        const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         const result = await this.execute<GetObjectCommandOutput>(command);
 
         if (!result.Body) {
@@ -895,12 +923,17 @@ export class S3BucketUtil {
         acl: ACLs = ACLs.private,
         version: string = '1.0.0'
     ): Promise<FileUploadResponse & { test: string }> {
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
         const upload = new Upload({
             client: this.s3Client,
             params: {
                 Bucket: this.bucket,
                 ACL: acl,
-                Key: filePath,
+                Key: normalizedKey,
                 Body: fileData,
                 Tagging: `version=${version}`,
             },
@@ -910,15 +943,20 @@ export class S3BucketUtil {
 
         return {
             Bucket: this.bucket,
-            Key: filePath,
-            Location: `https://${this.bucket}.s3.amazonaws.com/${filePath}`,
-            test: `${this.link}/${filePath}`,
+            Key: normalizedKey,
+            Location: `https://${this.bucket}.s3.amazonaws.com/${normalizedKey}`,
+            test: `${this.link}/${normalizedKey}`,
             ETag: result.ETag as string,
         };
     }
 
     async deleteFile(filePath: string): Promise<DeleteObjectCommandOutput> {
-        const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: filePath });
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
+        const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         return await this.execute<DeleteObjectCommandOutput>(command);
     }
 
@@ -936,14 +974,19 @@ export class S3BucketUtil {
             abortSignal?: AbortSignal;
         } = {}
     ): Promise<Readable | null> {
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
         if (checkFileExists) {
-            const isExists = await this.fileExists(filePath);
+            const isExists = await this.fileExists(normalizedKey);
             if (!isExists) return null;
         }
 
         const command = new GetObjectCommand({
             Bucket: this.bucket,
-            Key: filePath,
+            Key: normalizedKey,
             ...(Range ? { Range } : {}),
         });
 
@@ -975,10 +1018,15 @@ export class S3BucketUtil {
             lastModified?: Date;
         };
     } | null> {
+        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (!normalizedKey || normalizedKey === '/') {
+            throw new Error('No file key provided');
+        }
+
         try {
             const cmd = new GetObjectCommand({
                 Bucket: this.bucket,
-                Key: filePath,
+                Key: normalizedKey,
                 ...(Range ? { Range } : {}),
             });
 
@@ -999,7 +1047,12 @@ export class S3BucketUtil {
                 },
             };
         } catch (error) {
-            this.logger?.warn(this.reqId, 'getS3VideoStream error', { Bucket: this.bucket, filePath, Range, error });
+            this.logger?.warn(this.reqId, 'getS3VideoStream error', {
+                Bucket: this.bucket,
+                filePath: normalizedKey,
+                Range,
+                error,
+            });
             return null;
         }
     }
@@ -1014,7 +1067,17 @@ export class S3BucketUtil {
         compressionLevel?: number; // Compression level (0-9, lower = faster)
     }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const filePaths = ([] as string[]).concat(filePath as string[]);
+            const filePaths = ([] as string[])
+                .concat(filePath as string[])
+                .map((filePath) => {
+                    return decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+                })
+                .filter((v) => v && v !== '/');
+
+            if (!filePaths.length) {
+                throw new Error('No file keys provided');
+            }
+
             let filename = _filename || new Date().toISOString();
             filename = filename.endsWith('.zip') ? filename : `${filename}.zip`;
 
@@ -1172,27 +1235,32 @@ export class S3BucketUtil {
 
             req.once('close', onClose);
 
+            const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+            if (!normalizedKey || normalizedKey === '/') {
+                throw new Error('No file key provided');
+            }
+
             try {
-                const isExists = await this.fileExists(filePath);
+                const isExists = await this.fileExists(normalizedKey);
                 if (!isExists) {
                     req.off('close', onClose);
-                    next(Error(`File not found: "${filePath}"`));
+                    next(Error(`File not found: "${normalizedKey}"`));
                     return;
                 }
 
-                stream = await this.streamObjectFile(filePath, {
+                stream = await this.streamObjectFile(normalizedKey, {
                     abortSignal: abort.signal,
                     checkFileExists: false,
                 });
 
                 if (!stream) {
                     req.off('close', onClose);
-                    next(Error(`Failed to get file stream: "${filePath}"`));
+                    next(Error(`Failed to get file stream: "${normalizedKey}"`));
                     return;
                 }
 
-                const fileInfo = await this.fileInfo(filePath);
-                const fileName = filename || filePath.split('/').pop() || 'download';
+                const fileInfo = await this.fileInfo(normalizedKey);
+                const fileName = filename || normalizedKey.split('/').pop() || 'download';
 
                 res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
                 res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -1201,7 +1269,7 @@ export class S3BucketUtil {
                 }
 
                 stream.on('error', (err) => {
-                    this.logger?.warn(this.reqId, 'Stream error', { filePath, error: err });
+                    this.logger?.warn(this.reqId, 'Stream error', { filePath: normalizedKey, error: err });
                     abort.abort();
                     stream?.destroy?.();
                 });
@@ -1229,7 +1297,7 @@ export class S3BucketUtil {
                     return;
                 }
 
-                this.logger?.error(this.reqId, 'Failed to stream file', { filePath, error });
+                this.logger?.error(this.reqId, 'Failed to stream file', { filePath: normalizedKey, error });
 
                 if (!res.headersSent) {
                     next(error);
@@ -1258,13 +1326,17 @@ export class S3BucketUtil {
         streamTimeoutMS?: number | undefined;
     }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const filePath = fileKey;
-            const isExists = await this.fileExists(filePath);
-            const fileSize = await this.sizeOf(filePath);
+            const normalizedKey = decodeURIComponent(fileKey?.replace(/^\//, '').replace(/\/$/, '') || '');
+            if (!normalizedKey || normalizedKey === '/') {
+                throw new Error('No file key provided');
+            }
+
+            const isExists = await this.fileExists(normalizedKey);
+            const fileSize = await this.sizeOf(normalizedKey);
             let Range;
 
             if (!isExists) {
-                next(Error(`File does not exist: "${filePath}"`));
+                next(Error(`File does not exist: "${normalizedKey}"`));
                 return;
             }
 
@@ -1306,7 +1378,11 @@ export class S3BucketUtil {
             req.once('close', onClose);
 
             try {
-                const result = await this.streamVideoFile({ filePath, Range, abortSignal: abort.signal });
+                const result = await this.streamVideoFile({
+                    filePath: normalizedKey,
+                    Range,
+                    abortSignal: abort.signal,
+                });
                 const { body, meta } = result as any;
 
                 const origin = Array.isArray(allowedWhitelist)

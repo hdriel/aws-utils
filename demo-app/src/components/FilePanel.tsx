@@ -518,7 +518,9 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                 <Typography>This action cannot be undone.</Typography>
                 <List
                     buttonItems={false}
-                    items={[...selectedFiles].map((file) => ({ title: file }) as ListItemProps)}
+                    items={[...selectedFiles].map(
+                        (file) => ({ title: file, style: { color: 'red' } }) as ListItemProps
+                    )}
                 />
             </Dialog>
 
