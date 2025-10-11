@@ -588,7 +588,8 @@ export class S3BucketUtil {
 
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const result = await this.execute<ListObjectsV2CommandOutput>(
             new ListObjectsV2Command({
@@ -706,7 +707,8 @@ export class S3BucketUtil {
         const lastDirectory = directoryPath?.split('/').pop();
         const { directories, files } = await this.directoryList(normalizedPath);
 
-        if (directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const treeNode: any = {
             path: '/' + normalizedPath,
@@ -749,7 +751,8 @@ export class S3BucketUtil {
 
     async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
         let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
