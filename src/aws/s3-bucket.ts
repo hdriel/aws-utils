@@ -1426,7 +1426,7 @@ export class S3BucketUtil {
         }: S3UploadOptions = {}
     ): Multer {
         let normalizedPath = decodeURIComponent(directory?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directory !== '' && directory !== undefined) normalizedPath += '/';
+        if (directory !== '/' && directory !== '' && directory !== undefined) normalizedPath += '/';
 
         const fileSize = this.getFileSize(maxFileSize);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
