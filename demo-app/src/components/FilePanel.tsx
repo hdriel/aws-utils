@@ -478,7 +478,7 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                                     </Box>
                                 )}
 
-                                {fileKey && isImageFile(fileKey) && (
+                                {fileKey && isImageFile(fileKey) && selectedFiles.size === 1 && (
                                     <Box className="video-preview" mt={2}>
                                         <img
                                             src={`${import.meta.env.VITE_SERVER_URL}/files/image?file=${fileKey}`}
