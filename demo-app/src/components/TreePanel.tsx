@@ -340,8 +340,6 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
         }
     };
 
-    console.log('treeData', treeData);
-
     return (
         <div className="tree-panel">
             <div className="tree-header">
