@@ -652,16 +652,17 @@ export class S3BucketUtil {
             if (result.Contents) {
                 for (const content of result.Contents) {
                     const fullPath = content.Key!;
-                    const name = fullPath.split('/').pop();
+                    const relativePath = fullPath.replace(normalizedPath, '');
+                    const filename = fullPath.split('/').pop();
 
                     // If it ends with /, it's a directory marker
                     if (fullPath.endsWith('/')) {
-                        allDirectories.push(name.slice(0, -1)); // Remove trailing /
+                        allDirectories.push(relativePath.slice(0, -1)); // Remove trailing /
                     } else {
                         // It's a file
                         allFiles.push({
                             ...content,
-                            Name: name,
+                            Name: filename,
                             Path: fullPath,
                             LastModified: new Date(content.LastModified),
                         } as ContentFile & { Name: string; Path: string });
