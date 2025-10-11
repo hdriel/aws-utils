@@ -97,6 +97,20 @@ const parseRangeHeader = (range: string | undefined, contentLength: number, chun
     return [start, Math.min(end, end)];
 };
 
+interface TreeFileItem {
+    name: string;
+    path: string;
+    type: 'directory' | 'file';
+    size: number;
+    lastModified: Date;
+}
+interface TreeDirectoryItem {
+    name: string;
+    path: string;
+    type: 'directory' | 'file';
+    children: Array<TreeDirectoryItem | TreeFileItem>;
+}
+
 export class S3BucketUtil {
     public readonly s3Client: S3Client;
 
@@ -483,18 +497,19 @@ export class S3BucketUtil {
     // ##### DIRECTORY BLOCK ##########################
 
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        const normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
         if (!normalizedPath) {
             throw new Error('No directory path provided');
         }
 
-        const command = new PutObjectCommand({ Bucket: this.bucket, Key: normalizedPath });
+        const command = new PutObjectCommand({ Bucket: this.bucket, Key: `${normalizedPath}/` });
+        const result = await this.execute<PutObjectCommandOutput>(command);
 
-        return await this.execute<PutObjectCommandOutput>(command);
+        return result;
     }
 
     async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '');
+        const normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
         if (!normalizedPath) {
             throw new Error('No directory path provided');
         }
@@ -571,19 +586,17 @@ export class S3BucketUtil {
         } as DeleteObjectsCommandOutput;
     }
 
-    async directoryList(directoryPath?: string): Promise<{
-        directories: string[];
-        files: ContentFile[];
-    }> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '') ?? '';
+    async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
+        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
 
-        const command = new ListObjectsV2Command({
-            Bucket: this.bucket,
-            Prefix: normalizedPath,
-            Delimiter: '/',
-        });
-
-        const result = await this.execute<ListObjectsV2CommandOutput>(command);
+        const result = await this.execute<ListObjectsV2CommandOutput>(
+            new ListObjectsV2Command({
+                Bucket: this.bucket,
+                Prefix: normalizedPath,
+                Delimiter: '/',
+            })
+        );
 
         // Extract directories (CommonPrefixes)
         const directories = (result.CommonPrefixes || [])
@@ -599,14 +612,13 @@ export class S3BucketUtil {
         const files = (result.Contents || ([] as ContentFile[]))
             .filter((content) => {
                 // Filter out the directory marker itself (empty file with trailing /)
-                return content.Key !== normalizedPath && !content.Key?.endsWith('/');
+                return content.Size && content.Key !== normalizedPath && !content.Key?.endsWith('/');
             })
             .map((content: any) => ({
                 ...content,
-                Name: content.Key.replace(normalizedPath, ''),
+                Name: content.Key.replace(normalizedPath, '') || content.Key,
                 LastModified: new Date(content.LastModified),
-            }))
-            .filter((content) => content.Name);
+            }));
 
         return { directories, files };
     }
@@ -630,7 +642,6 @@ export class S3BucketUtil {
                 Bucket: this.bucket,
                 Prefix: normalizedPath,
                 ContinuationToken,
-                // No Delimiter - to get all nested items
             });
 
             const result: any = await this.execute<ListObjectsV2CommandOutput>(command);
@@ -658,10 +669,7 @@ export class S3BucketUtil {
             ContinuationToken = result.NextContinuationToken;
         } while (ContinuationToken);
 
-        return {
-            directories: allDirectories,
-            files: allFiles,
-        };
+        return { directories: allDirectories, files: allFiles };
     }
 
     /**
@@ -693,46 +701,39 @@ export class S3BucketUtil {
      * //   ]
      * // }
      */
-    async directoryTree(directoryPath?: string): Promise<{
-        name: string;
-        path: string;
-        type: 'directory' | 'file';
-        size?: number;
-        lastModified?: Date;
-        children?: Array<any>;
-    }> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '') ?? '';
+    async directoryTree(directoryPath?: string): Promise<TreeDirectoryItem> {
+        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        const lastDirectory = directoryPath?.split('/').pop();
+        const { directories, files } = await this.directoryList(normalizedPath);
 
-        const directory = directoryPath?.split('/').pop();
+        if (directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
 
-        const { directories, files } = await this.directoryList(directoryPath);
-
-        const tree: any = {
-            name: directory || 'root',
-            path: normalizedPath,
+        const treeNode: any = {
+            path: '/' + normalizedPath,
+            name: lastDirectory || this.bucket,
             type: 'directory',
-            children: [],
-        };
+            children: [] as Array<TreeDirectoryItem | TreeFileItem>,
+        } as TreeDirectoryItem;
 
         // Add files
         for (const file of files) {
-            tree.children.push({
+            treeNode.children.push({
+                path: '/' + file.Key,
                 name: file.Name,
-                path: normalizedPath + file.Name,
                 type: 'file',
                 size: file.Size,
                 lastModified: file.LastModified,
-            });
+            } as TreeFileItem);
         }
 
         // Add directories (recursively)
         for (const dir of directories) {
-            const subPath = normalizedPath + dir;
+            const subPath = treeNode.path + dir;
             const subTree = await this.directoryTree(subPath);
-            tree.children.push(subTree);
+            treeNode.children.push(subTree);
         }
 
-        return tree;
+        return treeNode;
     }
 
     // ##### FILES BLOCK ##########################
@@ -747,10 +748,10 @@ export class S3BucketUtil {
     }
 
     async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
-        const directoryPrefix = directoryPath?.endsWith('/') ? directoryPath : directoryPath ? `${directoryPath}/` : '';
+        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
 
-        const prefix = directoryPrefix + (fileNamePrefix || '');
-        this.logger?.debug(null, 'file list info', { prefix, directoryPrefix, directoryPath, fileNamePrefix });
+        const prefix = normalizedPath + (fileNamePrefix || '');
 
         const command = new ListObjectsCommand({
             Bucket: this.bucket,
@@ -760,16 +761,21 @@ export class S3BucketUtil {
 
         const result = await this.execute<ListObjectsCommandOutput>(command);
 
-        return (result.Contents ?? ([] as ContentFile[]))
+        const files = (result.Contents ?? ([] as ContentFile[]))
+            .filter((v) => v)
             .map(
-                (content: any) =>
+                (content) =>
                     ({
                         ...content,
-                        Name: content.Key.replace(prefix, ''),
-                        LastModified: new Date(content.LastModified),
+                        Name: content.Key?.replace(prefix, '') ?? content.Key,
+                        LastModified: content.LastModified ? new Date(content.LastModified) : null,
                     }) as ContentFile
             )
-            .filter((content) => content.Name);
+            .filter((content) => content.Size);
+
+        this.logger?.debug(null, 'file list info', { prefix, files });
+
+        return files;
     }
 
     async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {
@@ -1409,7 +1415,7 @@ export class S3BucketUtil {
     }
 
     getUploadFileMW(
-        directory: string,
+        directory?: string,
         {
             acl = ACLs.private,
             maxFileSize,
@@ -1419,6 +1425,9 @@ export class S3BucketUtil {
             metadata: customMetadata,
         }: S3UploadOptions = {}
     ): Multer {
+        let normalizedPath = decodeURIComponent(directory?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (directory !== '' && directory !== undefined) normalizedPath += '/';
+
         const fileSize = this.getFileSize(maxFileSize);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
         const fileExts = ([] as FILE_EXT[]).concat(fileExt);
@@ -1434,7 +1443,7 @@ export class S3BucketUtil {
                 bucket: this.bucket,
                 contentType: multerS3.AUTO_CONTENT_TYPE,
                 metadata: async (req: Request & any, file: File, cb: Function) => {
-                    const baseMetadata: FILES3_METADATA = { ...file, directory };
+                    const baseMetadata: FILES3_METADATA = { ...file, directory: normalizedPath };
 
                     if (customMetadata) {
                         const additionalMetadata =
@@ -1456,9 +1465,7 @@ export class S3BucketUtil {
                     }
 
                     filename = decodeURIComponent(filename);
-                    const normalizedDirectory = directory.endsWith('/') ? directory.slice(0, -1) : directory;
-                    const key = normalizedDirectory ? `${normalizedDirectory}/${filename}` : filename;
-
+                    const key = `${normalizedPath}${filename}`;
                     cb(null, key);
                 },
             }),

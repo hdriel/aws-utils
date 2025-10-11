@@ -1,5 +1,5 @@
 import env from './dotenv.ts';
-import { AWSConfigSharingUtil } from 'aws-api-utils';
+import { AWSConfigSharingUtil } from '../../src';
 
 AWSConfigSharingUtil.setConfig({
     accessKeyId: env?.AWS_ACCESS_KEY_ID,

@@ -27,7 +27,7 @@ export const getDirectoryTreeCtrl = async (req: Request, res: Response, _next: N
 
 export const createDirectoryCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const directory = req.body.directory?.replace(/^\//, '').replace(/\/$/, '');
+    const directory = req.body?.directory as string;
     if (!directory) {
         return next(new Error('No directory path provided'));
     }

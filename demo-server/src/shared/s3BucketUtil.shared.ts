@@ -1,4 +1,5 @@
-import { ACLs, S3BucketUtil } from 'aws-api-utils';
+// @ts-ignore
+import { ACLs, S3BucketUtil } from '../../../src';
 import logger from '../logger';
 
 let s3BucketUtil: S3BucketUtil;

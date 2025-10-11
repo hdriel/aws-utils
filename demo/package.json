@@ -4,6 +4,7 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
+        "dev:util": "tsx src/s3-util.ts",
         "dev:iam": "tsx src/iam.ts",
         "dev:s3-bucket": "tsx src/s3-bucket.ts",
         "test": "jest",
