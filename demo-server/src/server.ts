@@ -17,6 +17,11 @@ app.use((req: express.Request, _res: express.Response, next: any) => {
 
 initAppRoutes(app);
 
+app.use((err: any, req: express.Request, res: express.Response, _next: any) => {
+    logger.error(req.id, 'request error', { error: err.message });
+    res.status(500).json({ message: err.message });
+});
+
 const PORT = 5001;
 app.listen(PORT, () => {
     logger.info(null, 'server is up', { port: PORT });

@@ -1432,7 +1432,17 @@ export class S3BucketUtil {
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
         const fileExts = ([] as FILE_EXT[]).concat(fileExt);
         const fileFilter =
-            fileTypes?.length || fileExts?.length ? S3BucketUtil.fileFilter(fileTypes, fileExts) : undefined;
+            fileTypes?.length || fileExts?.length
+                ? S3BucketUtil.fileFilter(fileTypes, fileExts)
+                : // @ts-ignore
+                  (req, file, cb) => {
+                      if (!file.size) {
+                          // Handle zero-byte file explicitly, e.g., upload via S3 SDK or reject
+                          cb(Error('Empty file not allowed'), false); // Reject or proceed with a different logic
+                      } else {
+                          cb(null, true);
+                      }
+                  };
 
         return multer({
             fileFilter,
