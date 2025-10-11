@@ -630,12 +630,14 @@ export class S3BucketUtil {
      */
     async directoryListRecursive(directoryPath?: string): Promise<{
         directories: string[];
-        files: Array<ContentFile & { key: string; fullPath: string }>;
+        files: Array<ContentFile & { Name: string }>;
     }> {
-        const normalizedPath = directoryPath?.replace(/^\//, '').replace(/\/$/, '') ?? '';
+        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const allDirectories: string[] = [];
-        const allFiles: Array<ContentFile & { key: string; fullPath: string }> = [];
+        const allFiles: Array<ContentFile & { Name: string }> = [];
         let ContinuationToken: string | undefined = undefined;
 
         do {
@@ -650,19 +652,19 @@ export class S3BucketUtil {
             if (result.Contents) {
                 for (const content of result.Contents) {
                     const fullPath = content.Key!;
-                    const relativePath = fullPath.replace(normalizedPath, '');
+                    const name = fullPath.split('/').pop();
 
                     // If it ends with /, it's a directory marker
                     if (fullPath.endsWith('/')) {
-                        allDirectories.push(relativePath.slice(0, -1)); // Remove trailing /
+                        allDirectories.push(name.slice(0, -1)); // Remove trailing /
                     } else {
                         // It's a file
                         allFiles.push({
                             ...content,
-                            key: relativePath,
-                            fullPath: fullPath,
+                            Name: name,
+                            Path: fullPath,
                             LastModified: new Date(content.LastModified),
-                        } as ContentFile & { key: string; fullPath: string });
+                        } as ContentFile & { Name: string; Path: string });
                     }
                 }
             }
