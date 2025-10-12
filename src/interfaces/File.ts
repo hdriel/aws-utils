@@ -43,3 +43,18 @@ export type FILE_EXT =
 export type FILE_TYPE = 'image' | 'video' | 'application' | 'text' | 'audio';
 
 export type ByteUnitStringValue = `${number}${BytesUnit}`;
+
+export interface TreeFileItem {
+    name: string;
+    path: string;
+    type: 'directory' | 'file';
+    size: number;
+    lastModified: Date;
+}
+
+export interface TreeDirectoryItem {
+    name: string;
+    path: string;
+    type: 'directory' | 'file';
+    children: Array<TreeDirectoryItem | TreeFileItem>;
+}

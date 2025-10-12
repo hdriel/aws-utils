@@ -75,6 +75,8 @@ import type {
     FILES3_METADATA,
     FileUploadResponse,
     S3UploadOptions,
+    TreeDirectoryItem,
+    TreeFileItem,
     UploadedS3File,
 } from '../interfaces';
 export type { UploadedS3File } from '../interfaces';
@@ -96,20 +98,6 @@ const parseRangeHeader = (range: string | undefined, contentLength: number, chun
 
     return [start, Math.min(end, end)];
 };
-
-interface TreeFileItem {
-    name: string;
-    path: string;
-    type: 'directory' | 'file';
-    size: number;
-    lastModified: Date;
-}
-interface TreeDirectoryItem {
-    name: string;
-    path: string;
-    type: 'directory' | 'file';
-    children: Array<TreeDirectoryItem | TreeFileItem>;
-}
 
 export class S3BucketUtil {
     public readonly s3Client: S3Client;
@@ -613,7 +601,7 @@ export class S3BucketUtil {
         const files = (result.Contents || ([] as ContentFile[]))
             .filter((content) => {
                 // Filter out the directory marker itself (empty file with trailing /)
-                return content.Size && content.Key !== normalizedPath && !content.Key?.endsWith('/');
+                return content.Key !== normalizedPath && !content.Key?.endsWith('/');
             })
             .map((content: any) => ({
                 ...content,
