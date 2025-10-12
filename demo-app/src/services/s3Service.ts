@@ -1,5 +1,5 @@
 import { AWSCredentials, ListObjectsOutput, S3ResponseFile } from '../types/aws.ts';
-import axios, { Axios } from 'axios';
+import axios, { Axios, AxiosProgressEvent } from 'axios';
 import qs from 'qs';
 import { AwsTreeItem } from '../types/ui.ts';
 
@@ -45,7 +45,7 @@ class S3Service {
     async listBuckets(): Promise<string[]> {
         try {
             const { data: response } = await this.api.get('/listBuckets');
-            return response.Buckets?.map((bucket: any) => bucket.Name || '') || [];
+            return response.Buckets?.map((bucket: { Name: string }) => bucket.Name || '') || [];
         } catch (error) {
             console.error('Failed to list buckets:', error);
             throw error;
@@ -115,6 +115,13 @@ class S3Service {
 
     async uploadFile(file: File, path: string, onProgress?: (progress: number) => void): Promise<void> {
         try {
+            if (!file) return;
+
+            if (file.size === 0) {
+                const { data: response } = await this.api.post('/files/content', { path, data: '' });
+                return response;
+            }
+
             const formData = new FormData();
             formData.append('file', file);
 
@@ -133,7 +140,7 @@ class S3Service {
                     'X-Upload-Filename': encodedFilename,
                 },
                 onUploadProgress: onProgress
-                    ? (progressEvent: any) => {
+                    ? (progressEvent: AxiosProgressEvent) => {
                           const percentage = progressEvent.total
                               ? (progressEvent.loaded / progressEvent.total) * 100
                               : 0;
@@ -187,7 +194,7 @@ class S3Service {
                 timeout: 600_000, // 10m timeout
                 signal: this.downloadAbortController.signal,
                 onDownloadProgress: onProgress
-                    ? (progressEvent: any) => {
+                    ? (progressEvent: AxiosProgressEvent) => {
                           const percentage = progressEvent.total
                               ? (progressEvent.loaded / progressEvent.total) * 100
                               : 0;
@@ -238,7 +245,7 @@ class S3Service {
                 timeout: 600_000,
                 signal: this.downloadAbortController.signal,
                 onDownloadProgress: onProgress
-                    ? (progressEvent: any) => {
+                    ? (progressEvent: AxiosProgressEvent) => {
                           const percentage = progressEvent.total
                               ? (progressEvent.loaded / progressEvent.total) * 100
                               : 0;
@@ -261,7 +268,7 @@ class S3Service {
         }
     }
 
-    async getObject(filePath: string): Promise<any> {
+    async getObject(filePath: string): Promise<string> {
         try {
             const query = qs.stringify({ filePath });
             const { data: response } = await this.api.get(`/file/data?${query}`);

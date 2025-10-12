@@ -31,7 +31,7 @@ import { ACLs, S3BucketUtil } from 'aws-api-utils';
         console.log('#'.repeat(25));
         console.log('#### EXISTS BUCKET\n');
 
-        const bucketsExists = await s3BucketUtil.isExistsBucket();
+        const bucketsExists = await s3BucketUtil.isBucketExists();
         console.log('bucket exists', bucketsExists);
 
         console.log('\n' + '='.repeat(25));

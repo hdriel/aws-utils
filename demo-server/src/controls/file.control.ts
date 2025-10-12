@@ -141,8 +141,13 @@ export const viewImageFileCtrl = async (req: Request, res: Response, _next: Next
 
 export const uploadFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
-    const filename = req.body.path;
-    const result = await s3BucketUtil.uploadFile(filename, req.body.file);
+    const fileKey = req.body?.path ? decodeURIComponent(req.body?.path as string) : undefined;
+    if (!fileKey) {
+        res.status(404).json({ error: 'file path is required' });
+        return;
+    }
+
+    const result = await s3BucketUtil.uploadFile(fileKey, req.body.data || '');
 
     res.json(result);
 };

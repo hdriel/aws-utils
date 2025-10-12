@@ -17,7 +17,7 @@ export interface FILES3_METADATA extends File {
 
 // prettier-ignore
 export type FILE_EXT =
-// Images
+    // Images
     | 'jpg' | 'jpeg' | 'png' | 'gif' | 'bmp' | 'webp' | 'svg' | 'ico' | 'tif' | 'tiff' | 'heic' | 'heif' | 'raw' | 'cr2' | 'nef' | 'arw'
     // Videos
     | 'mp4' | 'avi' | 'mov' | 'wmv' | 'flv' | 'mkv' | 'webm' | 'mpeg' | 'mpg' | 'm4v' | '3gp' | 'ogv' | 'ts' | 'mts' | 'm2ts'
