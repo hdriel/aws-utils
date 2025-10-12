@@ -84,7 +84,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
 
         const label = (
             <Box className="item-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-                {isDirectory ? null : <SVGIcon muiIconName={getFileIcon(isDirectory ? '' : node.name)} />}
+                {isDirectory ? null : <SVGIcon muiIconName={getFileIcon(isDirectory ? '' : node.name)} size={'18px'} />}
                 <Typography className="item-name">{node.name}</Typography>
                 <Box sx={{ marginInlineStart: 'auto' }}>
                     {!isDirectory && node.size !== undefined && (
@@ -141,8 +141,9 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
             isLast: root.isLast ?? false,
             directory: root.type === 'directory',
             sx: {
+                '& .MuiTreeItem-content': { paddingY: '0 !important' },
                 ...((root.type === 'file' || !root.name) && {
-                    '& .MuiTreeItem-label': { marginLeft: '-5px' },
+                    '& .MuiTreeItem-label': { marginLeft: '-1px' },
                     '& .MuiTreeItem-iconContainer': { display: 'none' },
                 }),
             },
