@@ -53,8 +53,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setSuccess(false);
     };
 
-    const handleAutocompleteBucketChange = (_event: React.ChangeEvent<HTMLInputElement>, optionId: string | number) => {
-        setBucketName(optionId as string);
+    const handleAutocompleteBucketChange = (_event: React.ChangeEvent<HTMLInputElement>, option: any) => {
+        setBucketName(option.id as string);
         setError([]);
         setSuccess(false);
     };

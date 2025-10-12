@@ -3,7 +3,7 @@ import env from '../dotenv';
 import { ACLs, S3BucketUtil } from '../../../src';
 import logger from '../logger';
 
-let s3BucketUtil: S3BucketUtil;
+let s3BucketUtil: null | S3BucketUtil;
 let localstackS3BucketUtil: S3BucketUtil;
 
 export const getS3BucketUtil = () => {
@@ -16,6 +16,11 @@ export const changeS3BucketUtil = async (bucketName: string, acl: ACLs) => {
 
     return s3BucketUtil;
 };
+
+export const removeS3BucketUtil = () => {
+    s3BucketUtil = null;
+};
+
 export const getLocalstackS3BucketUtil = (bucketName?: string) => {
     if (!env) throw Error('env must be a defined');
 

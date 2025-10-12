@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Stack } from '@mui/material';
-import { Button, Typography, SVGIcon, Chip } from 'mui-simple';
+import { Button, Typography, SVGIcon, Chip, Tooltip } from 'mui-simple';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
 import TreePanel from './TreePanel';
@@ -22,8 +22,7 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, bucketAccess, onLog
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const handleLogout = () => {
-        s3Service.disconnect();
-        onLogout();
+        return s3Service.disconnect().then(() => onLogout());
     };
 
     const handleRefresh = () => {
@@ -51,14 +50,28 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, bucketAccess, onLog
                                     paddingInlineEnd: '5px',
                                     borderRadius: '5px',
                                 }}
-                                color={isPublicAccess ? 'info' : 'warning'}
-                                textColor={isPublicAccess ? '#FFFFFF' : '#000000'}
+                                color={isPublicAccess ? 'info' : 'success'}
+                                startIcon={
+                                    <SVGIcon size="15px" muiIconName={isPublicAccess ? 'Public' : 'PublicOff'} />
+                                }
                                 endIcon={
-                                    <SVGIcon
-                                        size="17px"
-                                        muiIconName={isPublicAccess ? 'Public' : 'PublicOff'}
-                                        color={isPublicAccess ? '#FFFFFF' : '#000000'}
-                                    />
+                                    localstack ? (
+                                        <Tooltip title="Are you sure you want to delete this bucket ??">
+                                            <SVGIcon size="18px" muiIconName="DeleteForever" />
+                                        </Tooltip>
+                                    ) : undefined
+                                }
+                                onDelete={
+                                    localstack
+                                        ? () => {
+                                              return s3Service
+                                                  .deleteLocalstackBucket(bucketName)
+                                                  .then(() => {
+                                                      handleLogout();
+                                                  })
+                                                  .catch(() => alert('Failed to delete localstack bucket'));
+                                          }
+                                        : undefined
                                 }
                             />
                             {localstack && (
@@ -71,6 +84,7 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, bucketAccess, onLog
                         </Stack>
                     </Box>
                 </Box>
+
                 <Button
                     variant="contained"
                     color="error"

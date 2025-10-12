@@ -386,7 +386,16 @@ class S3Service {
         }
     }
 
-    disconnect() {}
+    async disconnect() {
+        try {
+            const { data: response } = await this.api.post(`/disconnect`);
+
+            return response;
+        } catch (error) {
+            console.error('Failed to disconnect:', error);
+            throw error;
+        }
+    }
 }
 
 export const s3Service = new S3Service();

@@ -20,7 +20,7 @@ function App() {
     const [loading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [bucketName, setBucketName] = useState('');
-    const [bucketAccess, setBucketAccess] = useState<string>('private');
+    const [bucketAccess, setBucketAccess] = useState<'private' | 'public'>('private');
     const [isLocalstack, setIsLocalstack] = useState(false);
 
     const handleLoginSuccess = (bucketInfo: BucketInfo, localstack: boolean) => {
@@ -33,6 +33,7 @@ function App() {
     const handleLogout = () => {
         setIsAuthenticated(false);
         setBucketName('');
+        s3Service.disconnect();
     };
 
     useEffect(() => {
@@ -64,7 +65,7 @@ function App() {
                 <MainScreen
                     bucketName={bucketName}
                     bucketAccess={bucketAccess}
-                    localstack={isLocalstack}
+                    localstack={!isLocalstack}
                     onLogout={handleLogout}
                 />
             ) : (
