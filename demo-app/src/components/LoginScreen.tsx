@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Paper, Box } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Paper, Box, ListItem, ListItemAvatar, ListItemText, ListItemSecondaryAction } from '@mui/material';
 import {
     Checkbox,
     InputText,
@@ -10,55 +10,20 @@ import {
     Typography,
     Tooltip,
     Alert,
+    InputAutocomplete,
+    Avatar,
 } from 'mui-simple';
 import { CloudUpload, Public, PublicOff } from '@mui/icons-material';
 import { s3Service } from '../services/s3Service.ts';
 import { AWSCredentials, BucketInfo } from '../types/aws.ts';
 import '../styles/login.scss';
+import { AWS_REGIONS } from '../consts.ts';
 
 interface LoginScreenProps {
     onLoginSuccess: (bucketInfo: BucketInfo, localstack: boolean) => void;
 }
 
-const awsRegions = [
-    { value: 'us-east-2', label: 'US East (Ohio)' },
-    { value: 'us-east-1', label: 'US East (N. Virginia)', default: true },
-    { value: 'us-west-1', label: 'US West (N. California)' },
-    { value: 'us-west-2', label: 'US West (Oregon)' },
-    { value: 'af-south-1', label: 'Africa (Cape Town)' },
-    { value: 'ap-east-1', label: 'Asia Pacific (Hong Kong)' },
-    { value: 'ap-south-2', label: 'Asia Pacific (Hyderabad)' },
-    { value: 'ap-southeast-3', label: 'Asia Pacific (Jakarta)' },
-    { value: 'ap-southeast-5', label: 'Asia Pacific (Malaysia)' },
-    { value: 'ap-southeast-4', label: 'Asia Pacific (Melbourne)' },
-    { value: 'ap-south-1', label: 'Asia Pacific (Mumbai)' },
-    { value: 'ap-southeast-6', label: 'Asia Pacific (New Zealand)' },
-    { value: 'ap-northeast-3', label: 'Asia Pacific (Osaka)' },
-    { value: 'ap-northeast-2', label: 'Asia Pacific (Seoul)' },
-    { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
-    { value: 'ap-southeast-2', label: 'Asia Pacific (Sydney)' },
-    { value: 'ap-east-2', label: 'Asia Pacific (Taipei)' },
-    { value: 'ap-southeast-7', label: 'Asia Pacific (Thailand)' },
-    { value: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
-    { value: 'ca-central-1', label: 'Canada (Central)' },
-    { value: 'ca-west-1', label: 'Canada West (Calgary)' },
-    { value: 'eu-central-1', label: 'Europe (Frankfurt)' },
-    { value: 'eu-west-1', label: 'Europe (Ireland)' },
-    { value: 'eu-west-2', label: 'Europe (London)' },
-    { value: 'eu-south-1', label: 'Europe (Milan)' },
-    { value: 'eu-west-3', label: 'Europe (Paris)' },
-    { value: 'eu-south-2', label: 'Europe (Spain)' },
-    { value: 'eu-north-1', label: 'Europe (Stockholm)' },
-    { value: 'eu-central-2', label: 'Europe (Zurich)' },
-    { value: 'il-central-1', label: 'Israel (Tel Aviv)' },
-    { value: 'mx-central-1', label: 'Mexico (Central)' },
-    { value: 'me-south-1', label: 'Middle East (Bahrain)' },
-    { value: 'me-central-1', label: 'Middle East (UAE)' },
-    { value: 'sa-east-1', label: 'South America (São Paulo)' },
-    { value: 'us-gov-east-1', label: 'AWS GovCloud (US-East)' },
-    { value: 'us-gov-west-1', label: 'AWS GovCloud (US-West)' },
-];
-const defaultOptionValue = awsRegions.find((v) => v.default)?.value as string;
+const defaultOptionValue = AWS_REGIONS.find((v) => v.default)?.value as string;
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const [credentials, setCredentials] = useState<AWSCredentials>({
@@ -66,6 +31,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         secretAccessKey: import.meta.env.VITE_LOCALSTACK_SECRET_ACCESS_KEY ?? '',
         region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
     });
+    const [localstackBuckets, setLocalstackBuckets] = useState<
+        Array<{ label: string; id: string; [key: string]: any }>
+    >([]);
     const [bucketName, setBucketName] = useState('demo');
     const [isPublicAccess, setIsPublicAccess] = useState(false);
     const [isLocalstack, setIsLocalstack] = useState(true);
@@ -81,6 +49,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
     const handleBucketChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         setBucketName(event.target.value);
+        setError([]);
+        setSuccess(false);
+    };
+
+    const handleAutocompleteBucketChange = (_event: React.ChangeEvent<HTMLInputElement>, optionId: string | number) => {
+        setBucketName(optionId as string);
         setError([]);
         setSuccess(false);
     };
@@ -126,6 +100,26 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             return handleConnect();
         }
     };
+
+    const loadLocalstackBucketList = () => {
+        return s3Service
+            .localstackBucketsList()
+            .then((buckets) => {
+                setLocalstackBuckets(
+                    buckets.map(({ Name, BucketRegion, CreationDate }) => ({
+                        id: Name,
+                        label: Name,
+                        region: BucketRegion,
+                        date: new Date(CreationDate),
+                    }))
+                );
+            })
+            .catch(console.error);
+    };
+
+    useEffect(() => {
+        loadLocalstackBucketList();
+    }, []);
 
     return (
         <div className="login-container">
@@ -178,32 +172,91 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         className="form-field"
                         required
                         disabled={loading || isLocalstack}
-                        options={awsRegions.map((option) => ({ ...option, subtitle: option.value }))}
+                        options={AWS_REGIONS.map((option) => ({ ...option, subtitle: option.value }))}
                     />
 
-                    <InputText
-                        label="Bucket Name"
-                        variant="outlined"
-                        fullWidth
-                        value={bucketName}
-                        onChange={handleBucketChange}
-                        onKeyUp={handleKeyPress}
-                        disabled={loading}
-                        className="form-field"
-                        required
-                        helperText="Enter the name of your S3 bucket"
-                        endCmp={
-                            <Tooltip title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}>
-                                <Checkbox
-                                    icon={<PublicOff />}
-                                    checkedIcon={<Public />}
-                                    color={'primary'}
-                                    checked={isPublicAccess}
-                                    onChange={(e) => setIsPublicAccess(e.target.checked)}
-                                />
-                            </Tooltip>
-                        }
-                    />
+                    {isLocalstack ? (
+                        <InputAutocomplete
+                            label="Bucket Name"
+                            variant="outlined"
+                            creationAllowed
+                            fullWidth
+                            value={bucketName}
+                            onChange={handleAutocompleteBucketChange}
+                            onKeyUp={handleKeyPress}
+                            disabled={loading}
+                            className="form-field"
+                            required
+                            renderOption={(props, option, { selected }) => {
+                                return (
+                                    <ListItem {...props} color={selected ? 'primary' : undefined}>
+                                        <ListItemAvatar>
+                                            <Avatar icon="Public" />
+                                        </ListItemAvatar>
+                                        <ListItemText
+                                            primary={option.label}
+                                            secondary={`Created at: ${option.date.toLocaleString()}`}
+                                        />
+                                        <ListItemSecondaryAction>
+                                            <Button
+                                                icon="DeleteForever"
+                                                tooltipProps={{
+                                                    title: `Delete forever bucket: ${option.label}`,
+                                                    placement: 'left',
+                                                }}
+                                                onClick={() => {
+                                                    s3Service
+                                                        .deleteLocalstackBucket(option.id)
+                                                        .then(() => loadLocalstackBucketList())
+                                                        .catch(console.error);
+                                                }}
+                                            />
+                                        </ListItemSecondaryAction>
+                                    </ListItem>
+                                );
+                            }}
+                            options={localstackBuckets}
+                            helperText="Enter the name of your S3 bucket"
+                            endCmpExternal={
+                                <Tooltip title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}>
+                                    <Checkbox
+                                        icon={<PublicOff />}
+                                        checkedIcon={<Public />}
+                                        color={'primary'}
+                                        checked={isPublicAccess}
+                                        onChange={(e) => {
+                                            e.stopPropagation();
+                                            setIsPublicAccess(e.target.checked);
+                                        }}
+                                    />
+                                </Tooltip>
+                            }
+                        />
+                    ) : (
+                        <InputText
+                            label="Bucket Name"
+                            variant="outlined"
+                            fullWidth
+                            value={bucketName}
+                            onChange={handleBucketChange}
+                            onKeyUp={handleKeyPress}
+                            disabled={loading}
+                            className="form-field"
+                            required
+                            helperText="Enter the name of your S3 bucket"
+                            endCmp={
+                                <Tooltip title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}>
+                                    <Checkbox
+                                        icon={<PublicOff />}
+                                        checkedIcon={<Public />}
+                                        color={'primary'}
+                                        checked={isPublicAccess}
+                                        onChange={(e) => setIsPublicAccess(e.target.checked)}
+                                    />
+                                </Tooltip>
+                            }
+                        />
+                    )}
 
                     <Checkbox
                         color="primary"

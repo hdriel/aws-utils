@@ -53,6 +53,22 @@ class S3Service {
         }
     }
 
+    async localstackBucketsList(): Promise<
+        Array<{
+            BucketRegion: string;
+            CreationDate: string;
+            Name: string;
+        }>
+    > {
+        try {
+            const { data: response } = await this.api.get('/buckets/localstack');
+            return response;
+        } catch (error) {
+            console.error('Failed to get localstack buckets list:', error);
+            throw error;
+        }
+    }
+
     async listFileObjects(directory: string = ''): Promise<S3ResponseFile[]> {
         try {
             const query = qs.stringify({ directory: encodeURIComponent(directory) });
@@ -106,6 +122,17 @@ class S3Service {
             const { data: response } = await this.api.delete('/directories', {
                 data: { directory: directoryPath },
             });
+
+            return response;
+        } catch (error) {
+            console.error('Failed to delete folder:', error);
+            throw error;
+        }
+    }
+
+    async deleteLocalstackBucket(bucketName: string): Promise<void> {
+        try {
+            const { data: response } = await this.api.delete(`/buckets/localstack/${bucketName}`);
 
             return response;
         } catch (error) {
