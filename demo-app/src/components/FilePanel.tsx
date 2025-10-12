@@ -30,6 +30,7 @@ interface FilePanelProps {
 const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
     const [files, setFiles] = useState<S3File[]>([]);
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    const [allowedMultipleFiles, setAllowedMultipleFiles] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -266,6 +267,15 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                     <Typography variant="subtitle1" component="h3">
                         Upload Files
                     </Typography>
+                    <Box sx={{ position: 'absolute', top: 0, right: 15, zIndex: 1 }}>
+                        <Checkbox
+                            icon="CopyAll"
+                            checkedIcon="CopyAll"
+                            onClick={() => setAllowedMultipleFiles((v) => !v)}
+                            label="Multiple"
+                            textColor={allowedMultipleFiles ? 'primary' : undefined}
+                        />
+                    </Box>
                     <Box className="upload-buttons">
                         <Button
                             variant="contained"
@@ -291,12 +301,19 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                         />
                     </Box>
 
-                    <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload()} />
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        style={{ display: 'none' }}
+                        multiple={allowedMultipleFiles}
+                        onChange={handleFileUpload()}
+                    />
                     <input
                         ref={imageInputRef}
                         type="file"
                         accept="image/*"
                         style={{ display: 'none' }}
+                        multiple={allowedMultipleFiles}
                         onChange={handleFileUpload('image' as FILE_TYPE)}
                     />
                     <input
@@ -304,6 +321,7 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                         type="file"
                         accept="video/*"
                         style={{ display: 'none' }}
+                        multiple={allowedMultipleFiles}
                         onChange={handleFileUpload('video' as FILE_TYPE)}
                     />
 
