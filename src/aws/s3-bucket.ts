@@ -1529,7 +1529,7 @@ export class S3BucketUtil {
         const upload = this.getUploadFileMW(directory, options);
 
         return (req: Request & { s3File?: UploadedS3File } & any, res: Response, next: NextFunction & any) => {
-            const mw: any = upload.single(fieldName);
+            const mw: RequestHandler & any = upload.single(fieldName);
             mw(req, res, (err: any) => {
                 if (err) {
                     this.logger?.error(this.reqId, 'Single file upload error', { fieldName, error: err.message });
@@ -1555,11 +1555,11 @@ export class S3BucketUtil {
      * Middleware for uploading multiple files with the same field name
      * Adds the uploaded files info to req.s3Files
      */
-    uploadMultipleFiles(fieldName: string, directory: string, options: S3UploadOptions = {}): RequestHandler {
+    uploadMultipleFiles(fieldName: string, directory: string, options: S3UploadOptions = {}) {
         const upload = this.getUploadFileMW(directory, options);
 
         return (req: Request & { s3Files?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
-            const mw: any = upload.array(fieldName, options.maxFilesCount || undefined);
+            const mw: RequestHandler & any = upload.array(fieldName, options.maxFilesCount || undefined);
             mw(req, res, (err: any) => {
                 if (err) {
                     this.logger?.error(this.reqId, 'Multiple files upload error', { fieldName, error: err.message });
@@ -1607,7 +1607,7 @@ export class S3BucketUtil {
             const multerFields = fieldConfigs.map((f) => ({ name: f.name, maxCount: f.maxCount }));
             const upload = this.getUploadFileMW(fieldConfigs[0].directory);
 
-            const mw: any = upload.fields(multerFields);
+            const mw: RequestHandler & any = upload.fields(multerFields);
             mw(req, res, (err: any) => {
                 if (err) {
                     this.logger?.error(this.reqId, 'Fields upload error', { error: err.message });
@@ -1639,7 +1639,7 @@ export class S3BucketUtil {
         const upload = this.getUploadFileMW(directory, options);
 
         return (req: Request & { s3AllFiles?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
-            const anyUpload: any = maxCount ? upload.any() : upload.any();
+            const anyUpload: RequestHandler & any = maxCount ? upload.any() : upload.any();
 
             anyUpload(req, res, (err: any) => {
                 if (err) {

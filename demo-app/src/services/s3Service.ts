@@ -162,7 +162,7 @@ class S3Service {
 
     async uploadFiles(
         files: File[],
-        path: string,
+        directory: string,
         type?: FILE_TYPE,
         onProgress?: (progress: number) => void
     ): Promise<void> {
@@ -174,7 +174,7 @@ class S3Service {
                     .filter((file) => file.size === 0)
                     .map(async (file) => {
                         const { data: response } = await this.api.post('/files/content', {
-                            path: [path.replace(/\/$/, ''), file.name].join('/'),
+                            path: [directory.replace(/\/$/, ''), file.name].join('/'),
                             data: '',
                         });
                         return response;
@@ -185,13 +185,10 @@ class S3Service {
 
             const formData = new FormData();
             files.forEach((file) => {
-                formData.append('files', file);
+                const copyFile = new File([file], encodeURIComponent(file.name), { type: file.type });
+                formData.append('files', copyFile);
             });
 
-            const pathParts = path.split('/');
-            const directory = pathParts.join('/') || '/';
-
-            // Encode directory and filename to handle non-Latin characters
             const encodedDirectory = encodeURIComponent(directory);
 
             const { data: response } = await this.api.post(`/files/multi-upload/${type || ''}`, formData, {

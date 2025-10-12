@@ -139,15 +139,12 @@ export const uploadMultiFilesCtrl = (
 
     const directory = decodeURIComponent(encodedDirectory);
 
-    logger.info(req.id, 'uploading single file', { directory });
+    logger.info(req.id, 'uploading multiple files', { directory });
 
-    const uploadMiddleware = s3BucketUtil.uploadMultipleFiles('files', directory, {
-        ...(fileType && { fileType }),
-    });
-
-    const uploadedCallback: NextFunction = (err?: any) => {
+    // Create a wrapper that intercepts the next() call
+    const interceptNext: NextFunction = (err?: any) => {
         if (err) {
-            logger.warn(req.id, 'failed to upload single file', { message: err.message });
+            logger.warn(req.id, 'failed to upload files', { message: err.message });
             return next(err);
         }
 
@@ -169,7 +166,11 @@ export const uploadMultiFilesCtrl = (
         return res.status(400).json({ error: 'No file uploaded' });
     };
 
-    return uploadMiddleware(req, res, uploadedCallback);
+    const uploadMiddleware = s3BucketUtil.uploadMultipleFiles('files', directory, {
+        ...(fileType && { fileType }),
+    });
+
+    return uploadMiddleware(req, res, interceptNext);
 };
 
 export const viewImageFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {

@@ -96,7 +96,7 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
 
             try {
                 const filePath = currentPath || '/';
-                if (files.length > 1) {
+                if (allowedMultipleFiles) {
                     await s3Service.uploadFiles(files, filePath, type, (progress) => setUploadProgress(progress));
                 } else {
                     await s3Service.uploadFile(files[0], filePath, type, (progress) => setUploadProgress(progress));
