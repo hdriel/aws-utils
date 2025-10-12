@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Stack, useMediaQuery, useTheme } from '@mui/material';
+import { Box, Stack, useMediaQuery } from '@mui/material';
 import { Button, Typography, SVGIcon, Chip, Tooltip } from 'mui-simple';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
@@ -17,7 +17,6 @@ interface MainScreenProps {
 
 const MainScreen: React.FC<MainScreenProps> = ({ bucketName, bucketAccess, onLogout, localstack }) => {
     const isPublicAccess = bucketAccess === 'public';
-    const theme = useTheme();
     const mobileLayout = useMediaQuery((theme) => theme.breakpoints.down('md'));
 
     const [currentPath, setCurrentPath] = useState('');
@@ -128,7 +127,7 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, bucketAccess, onLog
                     </Panel>
                     <PanelResizeHandle
                         style={{
-                            background: theme.palette.primary.main,
+                            background: 'transparent',
                             ...(mobileLayout ? { width: '100%', height: '5px' } : { width: '3px', height: '100%' }),
                         }}
                     />
