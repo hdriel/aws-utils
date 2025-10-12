@@ -79,7 +79,17 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
         loadRootFiles();
     }, [refreshTrigger]);
 
-    const buildNodeLabel = (node: AwsTreeItem, nodeId: string, nodePath: string, parentId: string) => {
+    const buildNodeLabel = (
+        node: AwsTreeItem,
+        nodeId: string,
+        nodePath: string,
+        parentId: string,
+        {
+            paddingDeleteAction = '-5px',
+        }: {
+            paddingDeleteAction?: string;
+        } = {}
+    ) => {
         const isDirectory = node.type === 'directory';
 
         const label = (
@@ -105,7 +115,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                                 </p>
                             ),
                         }}
-                        sx={{ ...(!isDirectory && { marginInlineEnd: '-1px' }) }}
+                        sx={{ ...(!isDirectory && { marginInlineEnd: paddingDeleteAction }) }}
                         onClick={() =>
                             handleDeleteAction({
                                 id: nodeId,
@@ -127,7 +137,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
         if (!root) return null;
 
         const nodeId = !root.path || root.path === '/' ? 'root' : root.path || '/';
-        const label = buildNodeLabel(root, nodeId, root.path, parentId || 'root');
+        const label = buildNodeLabel(root, nodeId, root.path, parentId || 'root', { paddingDeleteAction: '-1px' });
 
         return {
             id: nodeId,
@@ -205,7 +215,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
         if (node && node.directory && (!node.children || node.children.length === 0)) {
             try {
                 const result = await s3Service.listObjects(node.path);
-
+                console.log('node.path', node.path);
                 const nodeData = buildTreeFromFiles(result, node.path);
                 const children = nodeData.children.map((currNode, index, arr) => {
                     const currNodePath =
