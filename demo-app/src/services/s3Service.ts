@@ -185,7 +185,7 @@ class S3Service {
 
             const formData = new FormData();
             files.forEach((file) => {
-                formData.append('file', file);
+                formData.append('files', file);
             });
 
             const pathParts = path.split('/');

@@ -11,6 +11,7 @@ import {
     downloadFilesAsZipCtrl,
     streamVideoFilesCtrl,
     viewImageFileCtrl,
+    uploadMultiFilesCtrl,
 } from '../controls/file.control';
 import { logApiMW } from '../middleware/logAPI.mw';
 
@@ -20,6 +21,7 @@ router.use(logApiMW);
 
 router.post('/content', uploadFileDataCtrl);
 router.post(['/upload/:fileType', '/upload'], uploadSingleFileCtrl);
+router.post(['/multi-upload/:fileType', '/multi-upload'], uploadMultiFilesCtrl);
 
 router.get('/image', viewImageFileCtrl);
 

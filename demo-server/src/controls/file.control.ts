@@ -123,6 +123,57 @@ export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File },
     return uploadMiddleware(req, res, uploadedCallback);
 };
 
+export const uploadMultiFilesCtrl = (
+    req: Request & { s3Files?: UploadedS3File[] },
+    res: Response,
+    next: NextFunction
+) => {
+    const s3BucketUtil = getS3BucketUtil();
+    const fileType = req.params?.fileType as FILE_TYPE;
+
+    const encodedDirectory = (req.headers['x-upload-directory'] as string) || '';
+
+    if (!encodedDirectory) {
+        return res.status(400).json({ error: 'Directory header is required' });
+    }
+
+    const directory = decodeURIComponent(encodedDirectory);
+
+    logger.info(req.id, 'uploading single file', { directory });
+
+    const uploadMiddleware = s3BucketUtil.uploadMultipleFiles('files', directory, undefined, {
+        ...(fileType && { fileType }),
+    });
+
+    const uploadedCallback = (err?: any) => {
+        if (err) {
+            logger.warn(req.id, 'failed to upload single file', { message: err.message });
+            return next(err);
+        }
+
+        const s3Files = req.s3Files;
+
+        if (s3Files?.length) {
+            const files = s3Files.map((s3File) => ({
+                key: s3File.key,
+                location: s3File.location,
+                bucket: s3File.bucket,
+                etag: s3File.etag,
+                size: s3File.size,
+            }));
+
+            logger.info(req.id, 'files uploaded', files);
+            return res.json({ success: true, files });
+        }
+
+        return res.status(400).json({ error: 'No file uploaded' });
+    };
+
+    // todo: fix this error
+    // @ts-ignore
+    return uploadMiddleware(req, res, uploadedCallback);
+};
+
 export const viewImageFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
     const fileKey = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;

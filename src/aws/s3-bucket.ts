@@ -1558,7 +1558,7 @@ export class S3BucketUtil {
     uploadMultipleFiles(
         fieldName: string,
         directory: string,
-        maxCount: number,
+        maxCount?: number | undefined,
         options: S3UploadOptions = {}
     ): RequestHandler {
         const upload = this.getUploadFileMW(directory, options);
