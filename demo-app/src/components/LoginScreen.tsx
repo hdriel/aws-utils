@@ -18,6 +18,7 @@ import { s3Service } from '../services/s3Service.ts';
 import { AWSCredentials, BucketInfo } from '../types/aws.ts';
 import '../styles/login.scss';
 import { AWS_REGIONS } from '../consts.ts';
+import { AxiosError } from 'axios';
 
 interface LoginScreenProps {
     onLoginSuccess: (bucketInfo: BucketInfo, localstack: boolean) => void;
@@ -32,7 +33,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         region: import.meta.env.VITE_LOCALSTACK_AWS_REGION ?? defaultOptionValue,
     });
     const [localstackBuckets, setLocalstackBuckets] = useState<
-        Array<{ label: string; id: string; [key: string]: any }>
+        Array<{
+            id: string;
+            label: string;
+            region: string;
+            date: Date;
+            public: boolean;
+        }>
     >([]);
     const [bucketName, setBucketName] = useState('demo');
     const [isPublicAccess, setIsPublicAccess] = useState(false);
@@ -53,8 +60,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setSuccess(false);
     };
 
-    const handleAutocompleteBucketChange = (_event: React.ChangeEvent<HTMLInputElement>, option: any) => {
-        setBucketName(option.id as string);
+    const handleAutocompleteBucketChange = (
+        _event: React.ChangeEvent<HTMLInputElement>,
+        option: string | { id?: string; inputValue?: string }
+    ) => {
+        setBucketName(typeof option === 'string' ? option : ((option.inputValue ?? option.id) as string));
         setError([]);
         setSuccess(false);
     };
@@ -82,14 +92,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             } else {
                 setError(['Failed to connect.', 'Please check your credentials and bucket name.']);
             }
-        } catch (err: any) {
-            setError([
-                'Connection failed.',
-                'Please verify your AWS credentials and bucket name.',
-                `Error: ${err.response?.data?.message}`,
-            ]);
-
-            console.error(err.response?.data?.message);
+        } catch (err) {
+            if (err instanceof AxiosError) {
+                setError([
+                    'Connection failed.',
+                    'Please verify your AWS credentials and bucket name.',
+                    `Error: ${err.response?.data?.message || err.message}`,
+                ]);
+                console.error(err.response?.data?.message);
+            } else {
+                setError([
+                    'Connection failed.',
+                    'An unexpected error occurred.',
+                    `Error: ${err instanceof Error ? err.message : String(err)}`,
+                ]);
+            }
         } finally {
             setLoading(false);
         }
@@ -106,11 +123,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             .localstackBucketsList()
             .then((buckets) => {
                 setLocalstackBuckets(
-                    buckets.map(({ Name, BucketRegion, CreationDate }) => ({
+                    buckets.map(({ Name, BucketRegion, CreationDate, PublicAccessBlockConfiguration }) => ({
                         id: Name,
                         label: Name,
                         region: BucketRegion,
                         date: new Date(CreationDate),
+                        public: !PublicAccessBlockConfiguration.BlockPublicPolicy,
                     }))
                 );
             })
@@ -182,40 +200,58 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                             creationAllowed
                             fullWidth
                             value={bucketName}
-                            onChange={handleAutocompleteBucketChange}
+                            onChange={(event, option) => handleAutocompleteBucketChange(event, option as string)}
                             onKeyUp={handleKeyPress}
                             disabled={loading}
                             className="form-field"
                             required
                             renderOption={(props, option, { selected }) => {
+                                console.log('renderOption', option);
+                                if (option.inputValue) {
+                                    return (
+                                        <ListItem {...props} color={selected ? 'primary' : undefined}>
+                                            <ListItemText primary={option.title} />
+                                        </ListItem>
+                                    );
+                                }
+
                                 return (
                                     <ListItem {...props} color={selected ? 'primary' : undefined}>
-                                        <ListItemAvatar>
-                                            <Avatar icon="Public" />
-                                        </ListItemAvatar>
+                                        {option.date && (
+                                            <ListItemAvatar>
+                                                <Avatar
+                                                    icon={option.public ? 'Public' : 'PublicOff'}
+                                                    color={option.public ? 'primary' : undefined}
+                                                />
+                                            </ListItemAvatar>
+                                        )}
                                         <ListItemText
                                             primary={option.label}
-                                            secondary={`Created at: ${option.date.toLocaleString()}`}
+                                            secondary={
+                                                option.date ? `Created at: ${option.date?.toLocaleString()}` : undefined
+                                            }
                                         />
-                                        <ListItemSecondaryAction>
-                                            <Button
-                                                icon="DeleteForever"
-                                                tooltipProps={{
-                                                    title: `Delete forever bucket: ${option.label}`,
-                                                    placement: 'left',
-                                                }}
-                                                onClick={() => {
-                                                    s3Service
-                                                        .deleteLocalstackBucket(option.id)
-                                                        .then(() => loadLocalstackBucketList())
-                                                        .catch(console.error);
-                                                }}
-                                            />
-                                        </ListItemSecondaryAction>
+                                        {option.date && (
+                                            <ListItemSecondaryAction>
+                                                <Button
+                                                    icon="DeleteForever"
+                                                    tooltipProps={{
+                                                        title: `Delete forever bucket: ${option.label}`,
+                                                        placement: 'left',
+                                                    }}
+                                                    onClick={() => {
+                                                        s3Service
+                                                            .deleteLocalstackBucket(option.id)
+                                                            .then(() => loadLocalstackBucketList())
+                                                            .catch(console.error);
+                                                    }}
+                                                />
+                                            </ListItemSecondaryAction>
+                                        )}
                                     </ListItem>
                                 );
                             }}
-                            options={localstackBuckets}
+                            options={[...localstackBuckets, { id: bucketName, label: bucketName }]}
                             helperText="Enter the name of your S3 bucket"
                             endCmpExternal={
                                 <Tooltip title={isPublicAccess ? 'Public bucket access' : 'Private bucket access'}>

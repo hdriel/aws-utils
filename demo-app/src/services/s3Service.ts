@@ -58,6 +58,12 @@ class S3Service {
             BucketRegion: string;
             CreationDate: string;
             Name: string;
+            PublicAccessBlockConfiguration: {
+                BlockPublicAcls?: boolean | undefined;
+                IgnorePublicAcls?: boolean | undefined;
+                BlockPublicPolicy?: boolean | undefined;
+                RestrictPublicBuckets?: boolean | undefined;
+            };
         }>
     > {
         try {

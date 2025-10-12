@@ -14,13 +14,6 @@ export const getBucketListCtrl = async (_req: Request, res: Response, _next: Nex
     res.json(result);
 };
 
-export const getLocalstackBucketListCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
-    const s3BucketUtil = getLocalstackS3BucketUtil();
-    const result = await s3BucketUtil.getBucketList();
-
-    res.json(result);
-};
-
 export const getBucketInfoCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
     if (!s3BucketUtil) {
@@ -63,6 +56,16 @@ export const deleteBucketCtrl = async (req: Request, res: Response, _next: NextF
     }
 
     const result = await s3BucketUtil.destroyBucket(!!+(req.query.force ?? '0'));
+
+    res.json(result);
+};
+
+export const getLocalstackBucketListCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
+    const s3BucketUtil = getLocalstackS3BucketUtil();
+    let result = await s3BucketUtil.getBucketList({}, true);
+    if (!result) {
+        res.status(403).json({ error: 'Error on getting localstack bucket list' });
+    }
 
     res.json(result);
 };

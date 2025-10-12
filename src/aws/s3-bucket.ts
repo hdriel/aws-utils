@@ -57,6 +57,7 @@ import {
     type DeleteObjectsCommandOutput,
     type GetBucketAclCommandOutput,
     type GetPublicAccessBlockCommandOutput,
+    type PublicAccessBlockConfiguration,
     type GetBucketPolicyCommandOutput,
     type GetBucketVersioningCommandOutput,
     type GetBucketEncryptionCommandOutput,
@@ -175,11 +176,31 @@ export class S3BucketUtil {
 
     // ##### BUCKET BLOCK ##########################
 
-    async getBucketList(options: Partial<ListBucketsCommandInput> = {}): Promise<Bucket[] | null> {
+    async getBucketList(
+        options: Partial<ListBucketsCommandInput> = {},
+        includePublicAccess: boolean = false
+    ): Promise<Array<Bucket & { PublicAccessBlockConfiguration?: PublicAccessBlockConfiguration }> | null> {
         const command = new ListBucketsCommand(options);
         const response = await this.execute<ListBucketsCommandOutput>(command);
 
-        return response?.Buckets || null;
+        const responseData = (response?.Buckets || null) as Array<
+            Bucket & { PublicAccessBlockConfiguration?: PublicAccessBlockConfiguration }
+        > | null;
+
+        if (!responseData) return null;
+
+        if (includePublicAccess) {
+            await Promise.allSettled(
+                responseData.map(async (data) => {
+                    const result = await this.execute<GetPublicAccessBlockCommandOutput>(
+                        new GetPublicAccessBlockCommand({ Bucket: data.Name })
+                    );
+                    data.PublicAccessBlockConfiguration = result.PublicAccessBlockConfiguration;
+                })
+            );
+        }
+
+        return responseData;
     }
 
     async isBucketExists(): Promise<boolean> {
