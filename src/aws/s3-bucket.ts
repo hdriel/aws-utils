@@ -767,7 +767,7 @@ export class S3BucketUtil {
                         LastModified: content.LastModified ? new Date(content.LastModified) : null,
                     }) as ContentFile
             )
-            .filter((content) => content.Size);
+            .filter((content) => content.Name);
 
         this.logger?.debug(null, 'file list info', { prefix, files });
 
