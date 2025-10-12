@@ -105,7 +105,7 @@ const TreePanel: React.FC<TreePanelProps> = ({ onFolderSelect, onRefresh, refres
                                 </p>
                             ),
                         }}
-                        sx={{ ...(!isDirectory && { marginInlineEnd: '-5px' }) }}
+                        sx={{ ...(!isDirectory && { marginInlineEnd: '-1px' }) }}
                         onClick={() =>
                             handleDeleteAction({
                                 id: nodeId,
