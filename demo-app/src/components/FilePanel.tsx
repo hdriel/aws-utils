@@ -269,8 +269,8 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                     </Typography>
                     <Box sx={{ position: 'absolute', top: 0, right: 15, zIndex: 1 }}>
                         <Checkbox
-                            icon="CopyAll"
-                            checkedIcon="CopyAll"
+                            icon="AutoAwesomeMotion"
+                            checkedIcon="AutoAwesomeMotion"
                             onClick={() => setAllowedMultipleFiles((v) => !v)}
                             label="Multiple"
                             textColor={allowedMultipleFiles ? 'primary' : undefined}
@@ -282,22 +282,22 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                             startIcon="CloudUpload"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
-                            label="Upload File"
+                            label={'Upload File' + (allowedMultipleFiles ? 's' : '')}
                         />
                         <Button
                             variant="outlined"
-                            startIcon="Image"
+                            startIcon={allowedMultipleFiles ? 'PermMedia' : 'Image'}
                             onClick={() => imageInputRef.current?.click()}
                             disabled={uploading}
-                            label="Upload Image"
+                            label={'Upload Image' + (allowedMultipleFiles ? 's' : '')}
                         />
 
                         <Button
                             variant="outlined"
-                            startIcon="VideoLibrary"
+                            startIcon={allowedMultipleFiles ? 'VideoLibrary' : 'Slideshow'}
                             onClick={() => videoInputRef.current?.click()}
                             disabled={uploading}
-                            label="Upload Video"
+                            label={'Upload Video' + (allowedMultipleFiles ? 's' : '')}
                         />
                     </Box>
 
