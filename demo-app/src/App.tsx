@@ -65,7 +65,7 @@ function App() {
                 <MainScreen
                     bucketName={bucketName}
                     bucketAccess={bucketAccess}
-                    localstack={!isLocalstack}
+                    localstack={isLocalstack}
                     onLogout={handleLogout}
                 />
             ) : (
