@@ -5,6 +5,11 @@ import { extname } from 'path';
 
 export const getFileInfoCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
@@ -17,6 +22,11 @@ export const getFileInfoCtrl = async (req: Request, res: Response, next: NextFun
 
 export const getFileDataCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
@@ -29,6 +39,11 @@ export const getFileDataCtrl = async (req: Request, res: Response, next: NextFun
 
 export const getFileUrlCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
@@ -42,6 +57,11 @@ export const getFileUrlCtrl = async (req: Request, res: Response, next: NextFunc
 
 export const getFileVersionCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
@@ -51,8 +71,14 @@ export const getFileVersionCtrl = async (req: Request, res: Response, next: Next
 
     res.json(result);
 };
+
 export const toggingFileVersionCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePath = req.query?.filePath ? decodeURIComponent(req.query?.filePath as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
@@ -65,6 +91,11 @@ export const toggingFileVersionCtrl = async (req: Request, res: Response, next: 
 
 export const deleteFileCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePath = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;
     if (!filePath) {
         return next(new Error('No file path provided'));
@@ -77,6 +108,11 @@ export const deleteFileCtrl = async (req: Request, res: Response, next: NextFunc
 
 export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File }, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const fileType = req.params?.fileType as FILE_TYPE;
 
     const encodedDirectory = (req.headers['x-upload-directory'] as string) || '';
@@ -129,6 +165,11 @@ export const uploadMultiFilesCtrl = (
     next: NextFunction
 ) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const fileType = req.params?.fileType as FILE_TYPE;
 
     const encodedDirectory = (req.headers['x-upload-directory'] as string) || '';
@@ -175,6 +216,11 @@ export const uploadMultiFilesCtrl = (
 
 export const viewImageFileCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const fileKey = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;
     if (!fileKey) {
         res.status(404).json({ error: 'file key is required' });
@@ -193,6 +239,11 @@ export const viewImageFileCtrl = async (req: Request, res: Response, _next: Next
 
 export const uploadFileDataCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const fileKey = req.body?.path ? decodeURIComponent(req.body?.path as string) : undefined;
     if (!fileKey) {
         res.status(404).json({ error: 'file path is required' });
@@ -206,6 +257,11 @@ export const uploadFileDataCtrl = async (req: Request, res: Response, _next: Nex
 
 export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const filePaths = ([] as string[])
         .concat(req.query.file as string[])
         .filter((v) => v)
@@ -221,6 +277,11 @@ export const downloadFilesAsZipCtrl = async (req: Request, res: Response, next: 
 
 export const streamVideoFilesCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const fileKey = req.query?.file ? decodeURIComponent(req.query?.file as string) : undefined;
     if (!fileKey) {
         return next(new Error('No file path provided'));

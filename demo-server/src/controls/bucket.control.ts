@@ -4,6 +4,11 @@ import { getLocalstackS3BucketUtil } from '../shared/s3BucketUtil.shared';
 
 export const getBucketListCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const result = await s3BucketUtil.getBucketList();
 
     res.json(result);
@@ -30,6 +35,11 @@ export const getBucketInfoCtrl = async (_req: Request, res: Response, _next: Nex
 
 export const getBucketDirectoryTreeCtrl = async (_req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const result = await s3BucketUtil.directoryTree();
 
     res.json(result);
@@ -47,6 +57,11 @@ export const createBucketCtrl = async (req: Request, res: Response, _next: NextF
 
 export const deleteBucketCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const result = await s3BucketUtil.destroyBucket(!!+(req.query.force ?? '0'));
 
     res.json(result);

@@ -3,6 +3,11 @@ import { getS3BucketUtil } from '../shared';
 
 export const getDirectoryListCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const directory = req.query?.directory ? decodeURIComponent(req.query?.directory as string) : undefined;
     const result = await s3BucketUtil.directoryList(directory);
 
@@ -11,6 +16,11 @@ export const getDirectoryListCtrl = async (req: Request, res: Response, _next: N
 
 export const getDirectoryFileListCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const directory = req.query?.directory ? decodeURIComponent(req.query?.directory as string) : undefined;
     const result = await s3BucketUtil.fileListInfo(directory);
 
@@ -19,6 +29,11 @@ export const getDirectoryFileListCtrl = async (req: Request, res: Response, _nex
 
 export const getDirectoryTreeCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const directory = req.query?.directory ? decodeURIComponent(req.query?.directory as string) : undefined;
     const result = await s3BucketUtil.directoryTree(directory);
 
@@ -27,6 +42,11 @@ export const getDirectoryTreeCtrl = async (req: Request, res: Response, _next: N
 
 export const createDirectoryCtrl = async (req: Request, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const directory = req.body?.directory as string;
     if (!directory) {
         return next(new Error('No directory path provided'));
@@ -39,6 +59,11 @@ export const createDirectoryCtrl = async (req: Request, res: Response, next: Nex
 
 export const deleteDirectoryCtrl = async (req: Request, res: Response, _next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    if (!s3BucketUtil) {
+        res.status(403).json({ error: 'credentials not found' });
+        return;
+    }
+
     const result = await s3BucketUtil.deleteDirectory(req.body.directory);
 
     res.json(result);
