@@ -593,7 +593,8 @@ export class S3BucketUtil {
             .map((prefix) => {
                 // Remove the base path and trailing slash to get just the directory name
                 const relativePath = prefix.replace(normalizedPath, '');
-                return relativePath.replace(/\/$/, '');
+                const dir = relativePath.replace(/\/$/, '');
+                return dir;
             })
             .filter((dir) => dir); // Remove empty strings
 
