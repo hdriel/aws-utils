@@ -20,6 +20,7 @@ import { s3Service } from '../services/s3Service.ts';
 import { formatFileSize, isVideoFile, downloadFile, getFileIcon, isImageFile } from '../utils/fileUtils.ts';
 import { S3File } from '../types/aws.ts';
 import '../styles/filePanel.scss';
+import { FILE_TYPE } from '../../../src';
 
 interface FilePanelProps {
     currentPath: string;
@@ -83,30 +84,36 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
         setSelectedFiles(newSelected);
     };
 
-    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
+    const handleFileUpload = (type?: FILE_TYPE) => {
+        return async (event: React.ChangeEvent<HTMLInputElement>) => {
+            const files = event.target.files && [...event.target.files];
+            if (!files?.length) return;
 
-        setUploading(true);
-        setUploadProgress(0);
-        setUploadingFileName(file.name);
-
-        try {
-            const filePath = currentPath ? `${currentPath}/${file.name}` : `/${file.name}`;
-            await s3Service.uploadFile(file, filePath, (progress) => setUploadProgress(progress));
-
-            await loadFiles();
-            onRefresh();
-        } catch (error) {
-            console.error('Failed to upload file:', error);
-        } finally {
-            setUploading(false);
+            setUploading(true);
             setUploadProgress(0);
-            setUploadingFileName('');
-            if (event.target) {
-                event.target.value = '';
+            setUploadingFileName(files.map((file) => file.name).join(', '));
+
+            try {
+                const filePath = currentPath || '/';
+                if (files.length > 1) {
+                    await s3Service.uploadFiles(files, filePath, type, (progress) => setUploadProgress(progress));
+                } else {
+                    await s3Service.uploadFile(files[0], filePath, type, (progress) => setUploadProgress(progress));
+                }
+
+                await loadFiles();
+                onRefresh();
+            } catch (error) {
+                console.error('Failed to upload file:', error);
+            } finally {
+                setUploading(false);
+                setUploadProgress(0);
+                setUploadingFileName('');
+                if (event.target) {
+                    event.target.value = '';
+                }
             }
-        }
+        };
     };
 
     const handleAbortDownload = () => {
@@ -284,20 +291,20 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                         />
                     </Box>
 
-                    <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
+                    <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload()} />
                     <input
                         ref={imageInputRef}
                         type="file"
                         accept="image/*"
                         style={{ display: 'none' }}
-                        onChange={handleFileUpload}
+                        onChange={handleFileUpload('image' as FILE_TYPE)}
                     />
                     <input
                         ref={videoInputRef}
                         type="file"
                         accept="video/*"
                         style={{ display: 'none' }}
-                        onChange={handleFileUpload}
+                        onChange={handleFileUpload('video' as FILE_TYPE)}
                     />
 
                     {uploading && (
@@ -334,7 +341,7 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                                         <Box className="file-info">
                                             <Checkbox
                                                 checked={selectedFiles.has(file.key)}
-                                                onClick={(e: any) => {
+                                                onClick={(e: Event) => {
                                                     e.stopPropagation();
                                                     handleFileSelect(file.key);
                                                 }}

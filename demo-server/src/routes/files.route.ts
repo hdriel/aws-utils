@@ -19,7 +19,7 @@ export const router: express.Router = express.Router();
 router.use(logApiMW);
 
 router.post('/content', uploadFileDataCtrl);
-router.post('/upload', uploadSingleFileCtrl);
+router.post(['/upload/:fileType', '/upload'], uploadSingleFileCtrl);
 
 router.get('/image', viewImageFileCtrl);
 

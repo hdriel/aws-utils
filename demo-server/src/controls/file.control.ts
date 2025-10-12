@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { getS3BucketUtil, type UploadedS3File } from '../shared';
+import { FILE_TYPE, getS3BucketUtil, type UploadedS3File } from '../shared';
 import logger from '../logger';
 import { extname } from 'path';
 
@@ -77,6 +77,7 @@ export const deleteFileCtrl = async (req: Request, res: Response, next: NextFunc
 
 export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File }, res: Response, next: NextFunction) => {
     const s3BucketUtil = getS3BucketUtil();
+    const fileType = req.params?.fileType as FILE_TYPE;
 
     const encodedDirectory = (req.headers['x-upload-directory'] as string) || '';
     const encodedFilename = req.headers['x-upload-filename'] as string;
@@ -91,6 +92,7 @@ export const uploadSingleFileCtrl = (req: Request & { s3File?: UploadedS3File },
     logger.info(req.id, 'uploading single file', { filename, directory });
 
     const uploadMiddleware = s3BucketUtil.uploadSingleFile('file', directory, {
+        ...(fileType && { fileType }),
         filename: filename || undefined,
     });
 

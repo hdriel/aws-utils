@@ -2,6 +2,7 @@ import { AWSCredentials, BucketInfo, ListObjectsOutput, S3ResponseFile } from '.
 import axios, { Axios, AxiosProgressEvent } from 'axios';
 import qs from 'qs';
 import { AwsTreeItem } from '../types/ui.ts';
+import { FILE_TYPE } from '../../../src';
 
 class S3Service {
     private api: Axios;
@@ -113,31 +114,90 @@ class S3Service {
         }
     }
 
-    async uploadFile(file: File, path: string, onProgress?: (progress: number) => void): Promise<void> {
+    async uploadFile(
+        file: File,
+        directoryPath: string,
+        type?: FILE_TYPE,
+        onProgress?: (progress: number) => void
+    ): Promise<void> {
         try {
             if (!file) return;
-
             if (file.size === 0) {
-                const { data: response } = await this.api.post('/files/content', { path, data: '' });
+                const { data: response } = await this.api.post('/files/content', {
+                    path: directoryPath + file.name,
+                    data: '',
+                });
                 return response;
             }
 
             const formData = new FormData();
             formData.append('file', file);
 
-            const pathParts = path.split('/');
-            const filename = pathParts.pop();
-            const directory = pathParts.join('/') || '/';
-
             // Encode directory and filename to handle non-Latin characters
-            const encodedDirectory = encodeURIComponent(directory);
-            const encodedFilename = encodeURIComponent(filename || file.name);
+            const encodedDirectory = encodeURIComponent(directoryPath);
+            const encodedFilename = encodeURIComponent(file.name);
 
-            const { data: response } = await this.api.post('/files/upload', formData, {
+            const { data: response } = await this.api.post(`/files/upload/${type || ''}`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     'X-Upload-Directory': encodedDirectory,
                     'X-Upload-Filename': encodedFilename,
+                },
+                onUploadProgress: onProgress
+                    ? (progressEvent: AxiosProgressEvent) => {
+                          const percentage = progressEvent.total
+                              ? (progressEvent.loaded / progressEvent.total) * 100
+                              : 0;
+                          onProgress(percentage);
+                      }
+                    : undefined,
+            });
+
+            return response;
+        } catch (error) {
+            console.error('Failed to upload file:', error);
+            throw error;
+        }
+    }
+
+    async uploadFiles(
+        files: File[],
+        path: string,
+        type?: FILE_TYPE,
+        onProgress?: (progress: number) => void
+    ): Promise<void> {
+        try {
+            if (!files) return;
+
+            await Promise.allSettled(
+                files
+                    .filter((file) => file.size === 0)
+                    .map(async (file) => {
+                        const { data: response } = await this.api.post('/files/content', {
+                            path: [path.replace(/\/$/, ''), file.name].join('/'),
+                            data: '',
+                        });
+                        return response;
+                    })
+            );
+
+            files = files.filter((file) => file.size !== 0);
+
+            const formData = new FormData();
+            files.forEach((file) => {
+                formData.append('file', file);
+            });
+
+            const pathParts = path.split('/');
+            const directory = pathParts.join('/') || '/';
+
+            // Encode directory and filename to handle non-Latin characters
+            const encodedDirectory = encodeURIComponent(directory);
+
+            const { data: response } = await this.api.post(`/files/multi-upload/${type || ''}`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'X-Upload-Directory': encodedDirectory,
                 },
                 onUploadProgress: onProgress
                     ? (progressEvent: AxiosProgressEvent) => {
