@@ -1558,13 +1558,13 @@ export class S3BucketUtil {
     uploadMultipleFiles(
         fieldName: string,
         directory: string,
-        maxCount?: number | undefined,
+        maxCount?: number | undefined | null,
         options: S3UploadOptions = {}
     ): RequestHandler {
         const upload = this.getUploadFileMW(directory, options);
 
         return (req: Request & { s3Files?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
-            const mw: any = upload.array(fieldName, maxCount);
+            const mw: any = upload.array(fieldName, maxCount || undefined);
             mw(req, res, (err: any) => {
                 if (err) {
                     this.logger?.error(this.reqId, 'Multiple files upload error', { fieldName, error: err.message });
