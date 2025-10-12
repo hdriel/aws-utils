@@ -1,4 +1,4 @@
-import { AWSCredentials, ListObjectsOutput, S3ResponseFile } from '../types/aws.ts';
+import { AWSCredentials, BucketInfo, ListObjectsOutput, S3ResponseFile } from '../types/aws.ts';
 import axios, { Axios, AxiosProgressEvent } from 'axios';
 import qs from 'qs';
 import { AwsTreeItem } from '../types/ui.ts';
@@ -31,14 +31,14 @@ class S3Service {
         });
     }
 
-    async isConnected(): Promise<any> {
+    async getConnectedBucketInfo(): Promise<BucketInfo | null> {
         try {
             const { data: bucketRoot } = await this.api.get('/buckets/bucket-info');
 
             return bucketRoot;
         } catch (error) {
             console.error('Connection test failed:', error);
-            return false;
+            return null;
         }
     }
 

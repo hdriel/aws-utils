@@ -4,6 +4,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import LoginScreen from './components/LoginScreen';
 import MainScreen from './components/MainScreen';
 import { s3Service } from './services/s3Service.ts';
+import { BucketInfo } from './types/aws.ts';
 
 const theme = createTheme({
     palette: {
@@ -19,10 +20,12 @@ function App() {
     const [loading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [bucketName, setBucketName] = useState('');
+    const [bucketAccess, setBucketAccess] = useState<string>('private');
     const [isLocalstack, setIsLocalstack] = useState(false);
 
-    const handleLoginSuccess = (bucket: string, localstack: boolean) => {
-        setBucketName(bucket);
+    const handleLoginSuccess = (bucketInfo: BucketInfo, localstack: boolean) => {
+        setBucketName(bucketInfo.name);
+        setBucketAccess(bucketInfo.publicAccessBlock?.BlockPublicPolicy ? 'private' : 'public');
         setIsAuthenticated(true);
         setIsLocalstack(localstack);
     };
@@ -34,11 +37,12 @@ function App() {
 
     useEffect(() => {
         s3Service
-            .isConnected()
+            .getConnectedBucketInfo()
             .then((bucketInfo) => {
                 if (bucketInfo) {
                     setIsAuthenticated(!!bucketInfo);
                     setBucketName(bucketInfo.name);
+                    setBucketAccess(bucketInfo.publicAccessBlock?.BlockPublicPolicy ? 'private' : 'public');
                     const localstack = !!+(localStorage.getItem('localstack') ?? '0');
                     setIsLocalstack(localstack);
                 } else {
@@ -57,7 +61,12 @@ function App() {
         <ThemeProvider theme={theme}>
             <CssBaseline />
             {isAuthenticated ? (
-                <MainScreen bucketName={bucketName} localstack={isLocalstack} onLogout={handleLogout} />
+                <MainScreen
+                    bucketName={bucketName}
+                    bucketAccess={bucketAccess}
+                    localstack={isLocalstack}
+                    onLogout={handleLogout}
+                />
             ) : (
                 <LoginScreen onLoginSuccess={handleLoginSuccess} />
             )}

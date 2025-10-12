@@ -67,6 +67,7 @@ import multer, { type Multer } from 'multer';
 import multerS3 from 'multer-s3';
 import bytes from 'bytes';
 import type {
+    BucketInfo,
     ByteUnitStringValue,
     ContentFile,
     File,
@@ -311,31 +312,7 @@ export class S3BucketUtil {
         } while (ContinuationToken);
     }
 
-    async bucketInfo(options?: Partial<HeadBucketCommandInput>): Promise<{
-        name: string;
-        region: string;
-        endpoint: string;
-        exists: boolean;
-        bucketRegion?: string;
-        accessPointAlias?: boolean;
-        creationDate?: Date;
-        acl?: Array<{
-            grantee?: string;
-            permission?: string;
-        }>;
-        publicAccessBlock?: {
-            BlockPublicAcls?: boolean;
-            IgnorePublicAcls?: boolean;
-            BlockPublicPolicy?: boolean;
-            RestrictPublicBuckets?: boolean;
-        };
-        policy?: any;
-        versioning?: string;
-        encryption?: {
-            enabled: boolean;
-            type?: string;
-        };
-    }> {
+    async bucketInfo(options?: Partial<HeadBucketCommandInput>): Promise<BucketInfo> {
         const bucketName = this.bucket;
         const info: any = {
             name: bucketName,

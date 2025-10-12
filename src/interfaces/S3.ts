@@ -44,3 +44,29 @@ export interface S3UploadOptions {
         | Record<string, string>
         | ((req: Request, file: File) => Record<string, string> | Promise<Record<string, string>>);
 }
+
+export interface BucketInfo {
+    name: string;
+    region: string;
+    endpoint: string;
+    exists: boolean;
+    bucketRegion?: string;
+    accessPointAlias?: boolean;
+    creationDate?: Date;
+    acl?: Array<{
+        grantee?: string;
+        permission?: string;
+    }>;
+    publicAccessBlock?: {
+        BlockPublicAcls?: boolean;
+        IgnorePublicAcls?: boolean;
+        BlockPublicPolicy?: boolean;
+        RestrictPublicBuckets?: boolean;
+    };
+    policy?: any;
+    versioning?: string;
+    encryption?: {
+        enabled: boolean;
+        type?: string;
+    };
+}

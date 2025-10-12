@@ -13,11 +13,11 @@ import {
 } from 'mui-simple';
 import { CloudUpload, Public, PublicOff } from '@mui/icons-material';
 import { s3Service } from '../services/s3Service.ts';
-import { AWSCredentials } from '../types/aws.ts';
+import { AWSCredentials, BucketInfo } from '../types/aws.ts';
 import '../styles/login.scss';
 
 interface LoginScreenProps {
-    onLoginSuccess: (bucketName: string, localstack: boolean) => void;
+    onLoginSuccess: (bucketInfo: BucketInfo, localstack: boolean) => void;
 }
 
 const awsRegions = [
@@ -97,13 +97,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         try {
             await s3Service.initialize(credentials, bucketName, isPublicAccess, isLocalstack);
-            const isConnected = await s3Service.isConnected();
+            const bucketInfo = await s3Service.getConnectedBucketInfo();
 
-            if (isConnected) {
+            if (bucketInfo) {
                 localStorage.setItem('localstack', isLocalstack ? '1' : '0');
                 setSuccess(true);
                 setTimeout(() => {
-                    onLoginSuccess(bucketName, isLocalstack);
+                    onLoginSuccess(bucketInfo, isLocalstack);
                 }, 500);
             } else {
                 setError(['Failed to connect.', 'Please check your credentials and bucket name.']);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { Button, Typography, SVGIcon, Chip } from 'mui-simple';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { LogoutOutlined } from '@mui/icons-material';
@@ -10,11 +10,14 @@ import '../styles/mainScreen.scss';
 
 interface MainScreenProps {
     bucketName: string;
+    bucketAccess: 'private' | 'public';
     localstack: boolean;
     onLogout: () => void;
 }
 
-const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstack }) => {
+const MainScreen: React.FC<MainScreenProps> = ({ bucketName, bucketAccess, onLogout, localstack }) => {
+    const isPublicAccess = bucketAccess === 'public';
+
     const [currentPath, setCurrentPath] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -35,13 +38,37 @@ const MainScreen: React.FC<MainScreenProps> = ({ bucketName, onLogout, localstac
                     <Box>
                         <Typography variant="h6" component="h1" color={'#ececec'}>
                             AWS S3 File Explorer
+                        </Typography>
+                        <Stack direction="row" spacing={2}>
+                            <Typography variant="caption" color={'#ececec'} size={17}>
+                                Bucket:
+                            </Typography>
+                            <Chip
+                                label={bucketName}
+                                sx={{
+                                    marginInlineStart: '1em',
+                                    height: '28px',
+                                    paddingInlineEnd: '5px',
+                                    borderRadius: '5px',
+                                }}
+                                color={isPublicAccess ? 'info' : 'warning'}
+                                textColor={isPublicAccess ? '#FFFFFF' : '#000000'}
+                                endIcon={
+                                    <SVGIcon
+                                        size="17px"
+                                        muiIconName={isPublicAccess ? 'Public' : 'PublicOff'}
+                                        color={isPublicAccess ? '#FFFFFF' : '#000000'}
+                                    />
+                                }
+                            />
                             {localstack && (
-                                <Chip label="localstack" color="secondary" sx={{ marginInlineStart: '1em' }} />
+                                <Chip
+                                    label="localstack"
+                                    color="secondary"
+                                    sx={{ marginInlineStart: '1em', height: '28px', borderRadius: '5px' }}
+                                />
                             )}
-                        </Typography>
-                        <Typography variant="caption" className="bucket-info" color={'#ececec'}>
-                            Bucket: {bucketName}
-                        </Typography>
+                        </Stack>
                     </Box>
                 </Box>
                 <Button
