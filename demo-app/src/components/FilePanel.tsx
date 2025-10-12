@@ -267,13 +267,12 @@ const FilePanel: React.FC<FilePanelProps> = ({ currentPath, onRefresh }) => {
                     <Typography variant="subtitle1" component="h3">
                         Upload Files
                     </Typography>
-                    <Box sx={{ position: 'absolute', top: 0, right: 15, zIndex: 1 }}>
-                        <Checkbox
+                    <Box sx={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
+                        <Button
                             icon="AutoAwesomeMotion"
-                            checkedIcon="AutoAwesomeMotion"
+                            color={allowedMultipleFiles ? 'primary' : undefined}
                             onClick={() => setAllowedMultipleFiles((v) => !v)}
-                            label="Multiple"
-                            textColor={allowedMultipleFiles ? 'primary' : undefined}
+                            tooltipProps={{ title: 'Allow upload multiple files', placement: 'left' }}
                         />
                     </Box>
                     <Box className="upload-buttons">
