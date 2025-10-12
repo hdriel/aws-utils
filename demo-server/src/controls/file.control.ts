@@ -141,7 +141,7 @@ export const uploadMultiFilesCtrl = (
 
     logger.info(req.id, 'uploading single file', { directory });
 
-    const uploadMiddleware = s3BucketUtil.uploadMultipleFiles('files', directory, undefined, {
+    const uploadMiddleware = s3BucketUtil.uploadMultipleFiles('files', directory, {
         ...(fileType && { fileType }),
     });
 

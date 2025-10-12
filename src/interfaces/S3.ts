@@ -36,6 +36,7 @@ export interface UploadedS3File extends Express.Multer.File {
 
 export interface S3UploadOptions {
     acl?: ACLs;
+    maxFilesCount?: undefined | number | null;
     maxFileSize?: ByteUnitStringValue | number;
     filename?: string | ((req: Request, file: File) => string | Promise<string>);
     fileType?: FILE_TYPE | FILE_TYPE[];
