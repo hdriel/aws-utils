@@ -1,6 +1,5 @@
 import env from '../dotenv';
-// @ts-ignore
-import { ACLs, S3BucketUtil } from '../../../src';
+import { ACLs, S3BucketUtil } from 'aws-api-utils';
 import logger from '../logger';
 
 let s3BucketUtil: null | S3BucketUtil;

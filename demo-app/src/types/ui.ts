@@ -1,5 +1,7 @@
 import { TreeViewNodeProps } from 'mui-simple';
 
+export type FILE_TYPE = 'image' | 'video' | 'application' | 'text' | 'audio';
+
 export interface AwsTreeItem {
     name: string;
     path: string;

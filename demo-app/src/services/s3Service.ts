@@ -1,8 +1,7 @@
 import { AWSCredentials, BucketInfo, ListObjectsOutput, S3ResponseFile } from '../types/aws.ts';
 import axios, { Axios, AxiosProgressEvent } from 'axios';
 import qs from 'qs';
-import { AwsTreeItem } from '../types/ui.ts';
-import { FILE_TYPE } from '../../../src';
+import { AwsTreeItem, FILE_TYPE } from '../types/ui.ts';
 
 class S3Service {
     private api: Axios;

@@ -20,7 +20,7 @@ import { s3Service } from '../services/s3Service.ts';
 import { formatFileSize, isVideoFile, downloadFile, getFileIcon, isImageFile } from '../utils/fileUtils.ts';
 import { S3File } from '../types/aws.ts';
 import '../styles/filePanel.scss';
-import { FILE_TYPE } from '../../../src';
+import { FILE_TYPE } from '../types/ui.ts';
 
 interface FilePanelProps {
     currentPath: string;
