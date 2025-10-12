@@ -1566,7 +1566,7 @@ export class S3BucketUtil {
                     return next(err);
                 }
 
-                if (req.files && Array.isArray(req.files)) {
+                if (Array.isArray(req.files)) {
                     req.s3Files = req.files as UploadedS3File[];
                     this.logger?.info(this.reqId, 'Multiple files uploaded successfully', {
                         fieldName,

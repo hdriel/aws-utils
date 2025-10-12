@@ -145,7 +145,7 @@ export const uploadMultiFilesCtrl = (
         ...(fileType && { fileType }),
     });
 
-    const uploadedCallback = (err?: any) => {
+    const uploadedCallback: NextFunction = (err?: any) => {
         if (err) {
             logger.warn(req.id, 'failed to upload single file', { message: err.message });
             return next(err);
@@ -169,8 +169,6 @@ export const uploadMultiFilesCtrl = (
         return res.status(400).json({ error: 'No file uploaded' });
     };
 
-    // todo: fix this error
-    // @ts-ignore
     return uploadMiddleware(req, res, uploadedCallback);
 };
 
