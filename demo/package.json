@@ -10,8 +10,8 @@
         "test": "jest",
         "test:watch": "jest --watch",
         "yalc:publish": "cd .. && npm run yalc:publish",
-        "yalc:attach": "yalc add aws-api-utils",
-        "yalc:detach": "yalc remove aws-api-utils"
+        "yalc:attach": "yalc add @hdriel/aws-utils",
+        "yalc:detach": "yalc remove @hdriel/aws-utils"
     },
     "devDependencies": {
         "@types/jest": "^30.0.0",
@@ -26,6 +26,7 @@
         "typescript": "^5.9.2"
     },
     "dependencies": {
+        "@hdriel/aws-utils": "file:.yalc/@hdriel/aws-utils",
         "aws-api-utils": "file:.yalc/aws-api-utils"
     }
 }

@@ -7,10 +7,11 @@
         "server": "tsx src/server.ts",
         "typecheck": "tsc --noEmit -p tsconfig.app.json",
         "yalc:publish": "cd .. && npm run yalc:publish",
-        "yalc:attach": "yalc add aws-api-utils",
-        "yalc:detach": "yalc remove aws-api-utils"
+        "yalc:attach": "yalc add @hdriel/aws-utils",
+        "yalc:detach": "yalc remove @hdriel/aws-utils"
     },
     "dependencies": {
+        "@hdriel/aws-utils": "file:.yalc/@hdriel/aws-utils",
         "@types/body-parser": "^1.19.6",
         "aws-api-utils": "file:.yalc/aws-api-utils",
         "body-parser": "^2.2.0",
