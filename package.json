@@ -1,6 +1,6 @@
 {
     "name": "@hdriel/aws-utils",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Simplified AWS SDK (v3) utilities for S3 (upload, download, streaming) with TypeScript support",
     "author": "Hadriel Benjo (https://github.com/hdriel)",
     "type": "module",
@@ -20,11 +20,11 @@
         }
     },
     "bugs": {
-        "url": "https://github.com/hdriel/stack-trace-logger/issues"
+        "url": "https://github.com/hdriel/aws-utils/issues"
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/hdriel/stack-trace-logger.git"
+        "url": "git+https://github.com/hdriel/aws-utils.git"
     },
     "scripts": {
         "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist",

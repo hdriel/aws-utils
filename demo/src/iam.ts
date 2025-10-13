@@ -1,6 +1,6 @@
 import './config';
 import { ListUsersCommand } from '@aws-sdk/client-iam';
-import { IAMUtil } from 'aws-api-utils';
+import { IAMUtil } from '@hdriel/aws-utils';
 
 (async () => {
     // @ts-ignore

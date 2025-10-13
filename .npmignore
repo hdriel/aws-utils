@@ -4,3 +4,5 @@ logs/
 *.log
 *.test.ts
 tsconfig.json
+demo
+nodemon.json

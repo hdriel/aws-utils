@@ -1,5 +1,5 @@
 import './config';
-import { ACLs, S3BucketUtil } from 'aws-api-utils';
+import { ACLs, S3BucketUtil } from '@hdriel/aws-utils';
 
 (async () => {
     const s3BucketUtil = new S3BucketUtil({ bucket: 'demo-bucket' });

@@ -26,7 +26,6 @@
         "typescript": "^5.9.2"
     },
     "dependencies": {
-        "@hdriel/aws-utils": "file:.yalc/@hdriel/aws-utils",
-        "aws-api-utils": "file:.yalc/aws-api-utils"
+        "@hdriel/aws-utils": "file:.yalc/@hdriel/aws-utils"
     }
 }
