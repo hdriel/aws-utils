@@ -909,7 +909,7 @@ export class S3BucketUtil {
         fileData: Buffer | Readable | string | Uint8Array,
         acl: ACLs = ACLs.private,
         version: string = '1.0.0'
-    ): Promise<FileUploadResponse & { test: string }> {
+    ): Promise<FileUploadResponse> {
         const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
         if (!normalizedKey || normalizedKey === '/') {
             throw new Error('No file key provided');
@@ -931,8 +931,7 @@ export class S3BucketUtil {
         return {
             Bucket: this.bucket,
             Key: normalizedKey,
-            Location: `https://${this.bucket}.s3.amazonaws.com/${normalizedKey}`,
-            test: `${this.link}/${normalizedKey}`,
+            Location: `${this.link}${normalizedKey}`,
             ETag: result.ETag as string,
         };
     }
