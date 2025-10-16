@@ -31,7 +31,7 @@
         "build:watch": "tsc --watch",
         "format": "prettier --write .",
         "clean": "rimraf ./dist",
-        "yalc:publish": "pnpm run build && yalc publish --private --push && cd demo && npm run yalc:attach",
+        "yalc:publish": "pnpm run build && yalc publish --private --push && cd demo && pnpm add @hdriel/aws-utils && cd ../demo && npm run yalc:attach",
         "docker:localstack:restart": "cross-env NODE_ENV=localhost && docker-compose -f docker-compose.localstack.yml --env-file .env.local up -d --build",
         "docker:localstack:down": "docker-compose -f docker-compose.localstack.yml down"
     },

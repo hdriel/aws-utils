@@ -101,6 +101,9 @@ const parseRangeHeader = (range: string | undefined, contentLength: number, chun
     return [start, Math.min(end, end)];
 };
 
+const getNormalizedPath = (directoryPath?: string) =>
+    decodeURIComponent(directoryPath?.replace(/^\/+/, '').replace(/\/+$/, '') || '');
+
 export class S3BucketUtil {
     public readonly s3Client: S3Client;
 
@@ -483,7 +486,7 @@ export class S3BucketUtil {
     // ##### DIRECTORY BLOCK ##########################
 
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
-        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        let normalizedPath = getNormalizedPath(directoryPath);
         if (!normalizedPath) throw new Error('No directory path provided');
         if (normalizedPath === '/') normalizedPath = '';
 
@@ -494,10 +497,8 @@ export class S3BucketUtil {
     }
 
     async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
-        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedPath) {
-            throw new Error('No directory path provided');
-        }
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (!normalizedPath) throw new Error('No directory path provided');
         if (normalizedPath === '/') normalizedPath = '';
 
         let totalDeletedCount = 0;
@@ -573,9 +574,9 @@ export class S3BucketUtil {
     }
 
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
-        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '/';
 
         const result = await this.execute<ListObjectsV2CommandOutput>(
             new ListObjectsV2Command({
@@ -611,6 +612,78 @@ export class S3BucketUtil {
         return { directories, files };
     }
 
+    async directoryListPaginated(
+        directoryPath?: string,
+        {
+            pageSize = 100,
+            pageNumber = 0, // 0-based: page 0 = items 0-99, page 1 = items 100-199, page 2 = items 200-299
+        }: {
+            pageSize?: number;
+            pageNumber?: number;
+        } = {}
+    ): Promise<{ directories: string[]; files: ContentFile[]; totalFetched: number }> {
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '/';
+
+        let continuationToken: string | undefined = undefined;
+        let currentPage = 0;
+        let allDirectories: string[] = [];
+        let allFiles: ContentFile[] = [];
+
+        // Loop through pages until we reach the target page
+        while (currentPage <= pageNumber) {
+            const result: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: normalizedPath,
+                    Delimiter: '/',
+                    MaxKeys: pageSize,
+                    ContinuationToken: continuationToken,
+                })
+            );
+
+            // If we're at the target page, extract the data
+            if (currentPage === pageNumber) {
+                // Extract directories
+                allDirectories = (result.CommonPrefixes || [])
+                    .map((prefix) => prefix.Prefix!)
+                    .map((prefix) => {
+                        const relativePath = prefix.replace(normalizedPath, '');
+                        return relativePath.replace(/\/$/, '');
+                    })
+                    .filter((dir) => dir);
+
+                // Extract files
+                allFiles = (result.Contents || ([] as ContentFile[]))
+                    .filter((content) => {
+                        return content.Key !== normalizedPath && !content.Key?.endsWith('/');
+                    })
+                    .map((content: any) => ({
+                        ...content,
+                        Name: content.Key.replace(normalizedPath, '') || content.Key,
+                        LastModified: new Date(content.LastModified),
+                    }));
+            }
+
+            // Move to next page
+            continuationToken = result.NextContinuationToken;
+
+            // Stop if no more results
+            if (!result.IsTruncated || !continuationToken) {
+                break;
+            }
+
+            currentPage++;
+        }
+
+        return {
+            directories: allDirectories,
+            files: allFiles,
+            totalFetched: allFiles.length + allDirectories.length,
+        };
+    }
+
     /**
      * Get all files recursively (example for search/indexing)
      * @param directoryPath
@@ -619,9 +692,9 @@ export class S3BucketUtil {
         directories: string[];
         files: Array<ContentFile & { Name: string }>;
     }> {
-        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '/';
 
         const allDirectories: string[] = [];
         const allFiles: Array<ContentFile & { Name: string }> = [];
@@ -693,7 +766,7 @@ export class S3BucketUtil {
      * // }
      */
     async directoryTree(directoryPath?: string): Promise<TreeDirectoryItem> {
-        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        let normalizedPath = getNormalizedPath(directoryPath);
         const lastDirectory = directoryPath?.split('/').pop();
         const { directories, files } = await this.directoryList(normalizedPath);
 
@@ -731,7 +804,7 @@ export class S3BucketUtil {
     // ##### FILES BLOCK ##########################
 
     async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
+        const normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') {
             throw new Error('No file key provided');
         }
@@ -742,9 +815,9 @@ export class S3BucketUtil {
     }
 
     async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
-        let normalizedPath = decodeURIComponent(directoryPath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directoryPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '/';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -773,12 +846,79 @@ export class S3BucketUtil {
         return files;
     }
 
+    async fileListInfoPaginated(
+        directoryPath?: string,
+        {
+            fileNamePrefix,
+            pageNumber = 0, // 0-based: page 0 = items 0-99, page 1 = items 100-199, page 2 = items 200-299
+            pageSize = 100,
+        }: { fileNamePrefix?: string; pageSize?: number; pageNumber?: number } = {}
+    ): Promise<{ files: ContentFile[]; totalFetched: number }> {
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '/';
+
+        const prefix = normalizedPath + (fileNamePrefix || '');
+
+        let continuationToken: string | undefined;
+        let currentPage = 0;
+        let resultFiles: ContentFile[] = [];
+
+        // Loop through pages until we reach the target page
+        while (currentPage <= pageNumber) {
+            const result = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: prefix,
+                    Delimiter: '/',
+                    MaxKeys: pageSize,
+                    ContinuationToken: continuationToken,
+                })
+            );
+
+            // If we're at the target page, extract the data
+            if (currentPage === pageNumber) {
+                resultFiles = (result.Contents ?? ([] as ContentFile[]))
+                    .filter((v) => v)
+                    .map(
+                        (content) =>
+                            ({
+                                ...content,
+                                Name: content.Key?.replace(prefix, '') ?? content.Key,
+                                LastModified: content.LastModified ? new Date(content.LastModified) : null,
+                            }) as ContentFile
+                    )
+                    .filter((content) => content.Name);
+            }
+
+            // Move to next page
+            continuationToken = result.NextContinuationToken;
+
+            // Stop if no more results
+            if (!result.IsTruncated || !continuationToken) {
+                break;
+            }
+
+            currentPage++;
+        }
+
+        this.logger?.debug(null, 'file list info paginated', {
+            prefix,
+            pageNumber,
+            pageSize,
+            fileCount: resultFiles.length,
+        });
+
+        return {
+            files: resultFiles,
+            totalFetched: resultFiles.length,
+        };
+    }
+
     async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {
         try {
-            const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-            if (!normalizedKey || normalizedKey === '/') {
-                throw new Error('No file key provided');
-            }
+            const normalizedKey = getNormalizedPath(filePath);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             const command = new PutObjectTaggingCommand({
                 Bucket: this.bucket,
@@ -795,10 +935,8 @@ export class S3BucketUtil {
     }
 
     async fileVersion(filePath: string): Promise<string> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new GetObjectTaggingCommand({ Bucket: this.bucket, Key: normalizedKey });
         const result = await this.execute<GetObjectTaggingCommandOutput>(command);
@@ -809,10 +947,8 @@ export class S3BucketUtil {
     }
 
     async fileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const expiresInSeconds = typeof expiresIn === 'number' ? expiresIn : ms(expiresIn) / 1000;
 
@@ -826,10 +962,8 @@ export class S3BucketUtil {
     }
 
     async sizeOf(filePath: string, unit: 'bytes' | 'KB' | 'MB' | 'GB' = 'bytes'): Promise<number> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         try {
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
@@ -857,10 +991,8 @@ export class S3BucketUtil {
 
     async fileExists(filePath: string): Promise<boolean> {
         try {
-            const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-            if (!normalizedKey || normalizedKey === '/') {
-                throw new Error('No file key provided');
-            }
+            const normalizedKey = getNormalizedPath(filePath);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
             await this.execute<HeadObjectCommandOutput>(command);
@@ -876,10 +1008,8 @@ export class S3BucketUtil {
     }
 
     async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         const result = await this.execute<GetObjectCommandOutput>(command);
@@ -910,10 +1040,8 @@ export class S3BucketUtil {
         acl: ACLs = ACLs.private,
         version: string = '1.0.0'
     ): Promise<FileUploadResponse> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const upload = new Upload({
             client: this.s3Client,
@@ -937,10 +1065,8 @@ export class S3BucketUtil {
     }
 
     async deleteFile(filePath: string): Promise<DeleteObjectCommandOutput> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         return await this.execute<DeleteObjectCommandOutput>(command);
@@ -960,10 +1086,8 @@ export class S3BucketUtil {
             abortSignal?: AbortSignal;
         } = {}
     ): Promise<Readable | null> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         if (checkFileExists) {
             const isExists = await this.fileExists(normalizedKey);
@@ -1004,10 +1128,8 @@ export class S3BucketUtil {
             lastModified?: Date;
         };
     } | null> {
-        const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        const normalizedKey = getNormalizedPath(filePath);
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         try {
             const cmd = new GetObjectCommand({
@@ -1055,9 +1177,7 @@ export class S3BucketUtil {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const filePaths = ([] as string[])
                 .concat(filePath as string[])
-                .map((filePath) => {
-                    return decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-                })
+                .map((filePath) => getNormalizedPath(filePath))
                 .filter((v) => v && v !== '/');
 
             if (!filePaths.length) {
@@ -1221,10 +1341,8 @@ export class S3BucketUtil {
 
             req.once('close', onClose);
 
-            const normalizedKey = decodeURIComponent(filePath?.replace(/^\//, '').replace(/\/$/, '') || '');
-            if (!normalizedKey || normalizedKey === '/') {
-                throw new Error('No file key provided');
-            }
+            const normalizedKey = getNormalizedPath(filePath);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             try {
                 const isExists = await this.fileExists(normalizedKey);
@@ -1312,10 +1430,8 @@ export class S3BucketUtil {
         streamTimeoutMS?: number | undefined;
     }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const normalizedKey = decodeURIComponent(fileKey?.replace(/^\//, '').replace(/\/$/, '') || '');
-            if (!normalizedKey || normalizedKey === '/') {
-                throw new Error('No file key provided');
-            }
+            const normalizedKey = getNormalizedPath(fileKey);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             const isExists = await this.fileExists(normalizedKey);
             const fileSize = await this.sizeOf(normalizedKey);
@@ -1483,7 +1599,7 @@ export class S3BucketUtil {
     }
 
     getUploadFileMW(
-        directory?: string,
+        directoryPath?: string,
         {
             acl = ACLs.private,
             maxFileSize,
@@ -1493,9 +1609,9 @@ export class S3BucketUtil {
             metadata: customMetadata,
         }: S3UploadOptions = {}
     ): Multer {
-        let normalizedPath = decodeURIComponent(directory?.replace(/^\//, '').replace(/\/$/, '') || '');
-        if (directory !== '/' && directory !== '' && directory !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '/';
 
         const fileSize = this.getFileSize(maxFileSize);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
