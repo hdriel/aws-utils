@@ -636,7 +636,7 @@ export class S3BucketUtil {
             .map((content: any) => ({
                 ...content,
                 Name: content.Key.replace(normalizedPath, '') || content.Key,
-                Location: `${this.link}${content.Key}`,
+                Location: `${this.link}${content.Key.replace(/^\//, '')}`,
                 LastModified: new Date(content.LastModified),
             }));
 
@@ -655,7 +655,7 @@ export class S3BucketUtil {
     ): Promise<{ directories: string[]; files: ContentFile[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = '/';
 
         let continuationToken: string | undefined = undefined;
         let currentPage = 0;
@@ -666,7 +666,7 @@ export class S3BucketUtil {
         while (currentPage <= pageNumber) {
             let result: ListObjectsV2CommandOutput;
 
-            if (normalizedPath === '') {
+            if (normalizedPath === '/') {
                 const [fileResponse, { CommonPrefixes }] = await Promise.all([
                     this.execute<ListObjectsV2CommandOutput>(
                         new ListObjectsV2Command({
@@ -677,13 +677,13 @@ export class S3BucketUtil {
                             ContinuationToken: continuationToken,
                         })
                     ),
-                    // it's going to make some bugs here, because we got the fileResponse.NextContinuationToken and not consider to the NextContinuationToken of the seconds response, hopefully aws fill fixing that bug to make separate calls on the root level
+                    // todo: it's going to make some bugs here, because we got the fileResponse.NextContinuationToken and not consider to the NextContinuationToken of the seconds response, that mean we pull the same directory again and again, hopefully aws fill fixing that bug to make separate calls on the root level
                     await this.execute<ListObjectsV2CommandOutput>(
                         new ListObjectsV2Command({
                             Bucket: this.bucket,
                             Prefix: '',
                             Delimiter: '/',
-                            MaxKeys: pageSize,
+                            MaxKeys: 1000,
                             ContinuationToken: continuationToken,
                         })
                     ),
@@ -722,7 +722,7 @@ export class S3BucketUtil {
                     .map((content: any) => ({
                         ...content,
                         Name: content.Key.replace(normalizedPath, '') || content.Key,
-                        Location: `${this.link}${content.Key}`,
+                        Location: `${this.link}${content.Key.replace(/^\//, '')}`,
                         LastModified: new Date(content.LastModified),
                     }));
             }
@@ -785,7 +785,7 @@ export class S3BucketUtil {
                             ...content,
                             Name: filename,
                             Path: fullPath,
-                            Location: `${this.link}${content.Key}`,
+                            Location: content.Key ? `${this.link}${content.Key?.replace(/^\//, '')}` : '',
                             LastModified: content.LastModified ? new Date(content.LastModified) : null,
                         } as ContentFile & { Name: string; Path: string });
                     }
@@ -847,7 +847,7 @@ export class S3BucketUtil {
             treeNode.children.push({
                 path: '/' + file.Key,
                 name: file.Name,
-                location: `${this.link}${file.Key}`,
+                location: `${this.link}${file.Key.replace(/^\//, '')}`,
                 type: 'file',
                 size: file.Size,
                 lastModified: file.LastModified,
@@ -902,7 +902,7 @@ export class S3BucketUtil {
                     ({
                         ...content,
                         Name: content.Key?.replace(prefix, '') ?? content.Key,
-                        Location: `${this.link}${content.Key}`,
+                        Location: content.Key ? `${this.link}${content.Key?.replace(/^\//, '')}` : '',
                         LastModified: content.LastModified ? new Date(content.LastModified) : null,
                     }) as ContentFile & { Location: string }
             )
@@ -952,7 +952,7 @@ export class S3BucketUtil {
                             ({
                                 ...content,
                                 Name: content.Key?.replace(prefix, '') ?? content.Key,
-                                Location: `${this.link}${content.Key}`,
+                                Location: content.Key ? `${this.link}${content.Key.replace(/^\//, '')}` : '',
                                 LastModified: content.LastModified ? new Date(content.LastModified) : null,
                             }) as ContentFile & { Location: string }
                     )
