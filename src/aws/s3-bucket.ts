@@ -576,7 +576,7 @@ export class S3BucketUtil {
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
 
         const result = await this.execute<ListObjectsV2CommandOutput>(
             new ListObjectsV2Command({
@@ -624,7 +624,7 @@ export class S3BucketUtil {
     ): Promise<{ directories: string[]; files: ContentFile[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
 
         let continuationToken: string | undefined = undefined;
         let currentPage = 0;
@@ -694,7 +694,7 @@ export class S3BucketUtil {
     }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
 
         const allDirectories: string[] = [];
         const allFiles: Array<ContentFile & { Name: string }> = [];
@@ -817,7 +817,7 @@ export class S3BucketUtil {
     async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -856,7 +856,7 @@ export class S3BucketUtil {
     ): Promise<{ files: ContentFile[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -1611,7 +1611,7 @@ export class S3BucketUtil {
     ): Multer {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
 
         const fileSize = this.getFileSize(maxFileSize);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
