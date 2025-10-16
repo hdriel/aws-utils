@@ -578,13 +578,43 @@ export class S3BucketUtil {
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';
 
-        const result = await this.execute<ListObjectsV2CommandOutput>(
-            new ListObjectsV2Command({
-                Bucket: this.bucket,
-                Prefix: normalizedPath,
-                Delimiter: '/',
-            })
-        );
+        let result: ListObjectsV2CommandOutput;
+
+        if (normalizedPath === '') {
+            const [fileResponse, { CommonPrefixes }] = await Promise.all([
+                this.execute<ListObjectsV2CommandOutput>(
+                    new ListObjectsV2Command({
+                        Bucket: this.bucket,
+                        Prefix: '/',
+                        Delimiter: '/',
+                    })
+                ),
+                await this.execute<ListObjectsV2CommandOutput>(
+                    new ListObjectsV2Command({
+                        Bucket: this.bucket,
+                        Prefix: '',
+                        Delimiter: '/',
+                    })
+                ),
+            ]);
+
+            result = fileResponse;
+            result.CommonPrefixes = CommonPrefixes;
+        } else {
+            result = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: normalizedPath,
+                    Delimiter: '/',
+                })
+            );
+        }
+
+        this.logger?.debug(null, '#### directoryList', {
+            normalizedPath,
+            CommonPrefixes: result.CommonPrefixes,
+            ContentFile: result.Contents,
+        });
 
         // Extract directories (CommonPrefixes)
         const directories = (result.CommonPrefixes || [])
@@ -634,15 +664,44 @@ export class S3BucketUtil {
 
         // Loop through pages until we reach the target page
         while (currentPage <= pageNumber) {
-            const result: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
-                new ListObjectsV2Command({
-                    Bucket: this.bucket,
-                    Prefix: normalizedPath,
-                    Delimiter: '/',
-                    MaxKeys: pageSize,
-                    ContinuationToken: continuationToken,
-                })
-            );
+            let result: ListObjectsV2CommandOutput;
+
+            if (normalizedPath === '') {
+                const [fileResponse, { CommonPrefixes }] = await Promise.all([
+                    this.execute<ListObjectsV2CommandOutput>(
+                        new ListObjectsV2Command({
+                            Bucket: this.bucket,
+                            Prefix: '/',
+                            Delimiter: '/',
+                            MaxKeys: pageSize,
+                            ContinuationToken: continuationToken,
+                        })
+                    ),
+                    // it's going to make some bugs here, because we got the fileResponse.NextContinuationToken and not consider to the NextContinuationToken of the seconds response, hopefully aws fill fixing that bug to make separate calls on the root level
+                    await this.execute<ListObjectsV2CommandOutput>(
+                        new ListObjectsV2Command({
+                            Bucket: this.bucket,
+                            Prefix: '',
+                            Delimiter: '/',
+                            MaxKeys: pageSize,
+                            ContinuationToken: continuationToken,
+                        })
+                    ),
+                ]);
+
+                result = fileResponse;
+                result.CommonPrefixes = CommonPrefixes;
+            } else {
+                result = await this.execute<ListObjectsV2CommandOutput>(
+                    new ListObjectsV2Command({
+                        Bucket: this.bucket,
+                        Prefix: normalizedPath,
+                        Delimiter: '/',
+                        MaxKeys: pageSize,
+                        ContinuationToken: continuationToken,
+                    })
+                );
+            }
 
             // If we're at the target page, extract the data
             if (currentPage === pageNumber) {
@@ -696,20 +755,20 @@ export class S3BucketUtil {
     }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = '/';
 
         const allDirectories: string[] = [];
         const allFiles: Array<ContentFile & { Name: string }> = [];
         let ContinuationToken: string | undefined = undefined;
 
         do {
-            const command = new ListObjectsV2Command({
-                Bucket: this.bucket,
-                Prefix: normalizedPath,
-                ContinuationToken,
-            });
-
-            const result: any = await this.execute<ListObjectsV2CommandOutput>(command);
+            const result: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: normalizedPath,
+                    ContinuationToken,
+                })
+            );
 
             if (result.Contents) {
                 for (const content of result.Contents) {
@@ -727,7 +786,7 @@ export class S3BucketUtil {
                             Name: filename,
                             Path: fullPath,
                             Location: `${this.link}${content.Key}`,
-                            LastModified: new Date(content.LastModified),
+                            LastModified: content.LastModified ? new Date(content.LastModified) : null,
                         } as ContentFile & { Name: string; Path: string });
                     }
                 }
@@ -824,7 +883,7 @@ export class S3BucketUtil {
     ): Promise<(ContentFile & { Location: string })[]> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = '/';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -864,7 +923,7 @@ export class S3BucketUtil {
     ): Promise<{ files: (ContentFile & { Location: string })[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = '/'; // Must filter by '/' to find files on root
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -1620,7 +1679,7 @@ export class S3BucketUtil {
     ): Multer {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = '/';
 
         const fileSize = this.getFileSize(maxFileSize);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
@@ -1670,8 +1729,14 @@ export class S3BucketUtil {
      * Middleware for uploading a single file
      * Adds the uploaded file info to req.s3File
      */
-    uploadSingleFile(fieldName: string, directory: string, options: S3UploadOptions = {}) {
-        const upload = this.getUploadFileMW(directory, options);
+    uploadSingleFile(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
+
+        this.logger?.debug(null, '####### uploadSingleFile', { directoryPath, normalizedPath, fieldName });
+
+        const upload = this.getUploadFileMW(normalizedPath, options);
 
         return (req: Request & { s3File?: UploadedS3File } & any, res: Response, next: NextFunction & any) => {
             const mw: RequestHandler & any = upload.single(fieldName);
@@ -1700,8 +1765,12 @@ export class S3BucketUtil {
      * Middleware for uploading multiple files with the same field name
      * Adds the uploaded files info to req.s3Files
      */
-    uploadMultipleFiles(fieldName: string, directory: string, options: S3UploadOptions = {}) {
-        const upload = this.getUploadFileMW(directory, options);
+    uploadMultipleFiles(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
+
+        const upload = this.getUploadFileMW(normalizedPath, options);
 
         return (req: Request & { s3Files?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
             const mw: RequestHandler & any = upload.array(fieldName, options.maxFilesCount || undefined);
@@ -1780,8 +1849,12 @@ export class S3BucketUtil {
      * Middleware for uploading any files (mixed field names)
      * Adds the uploaded files info to req.s3AllFiles
      */
-    uploadAnyFiles(directory: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
-        const upload = this.getUploadFileMW(directory, options);
+    uploadAnyFiles(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
+
+        const upload = this.getUploadFileMW(normalizedPath, options);
 
         return (req: Request & { s3AllFiles?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
             const anyUpload: RequestHandler & any = maxCount ? upload.any() : upload.any();
