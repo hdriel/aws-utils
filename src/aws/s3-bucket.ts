@@ -606,6 +606,7 @@ export class S3BucketUtil {
             .map((content: any) => ({
                 ...content,
                 Name: content.Key.replace(normalizedPath, '') || content.Key,
+                Location: `${this.link}${content.Key}`,
                 LastModified: new Date(content.LastModified),
             }));
 
@@ -662,6 +663,7 @@ export class S3BucketUtil {
                     .map((content: any) => ({
                         ...content,
                         Name: content.Key.replace(normalizedPath, '') || content.Key,
+                        Location: `${this.link}${content.Key}`,
                         LastModified: new Date(content.LastModified),
                     }));
             }
@@ -724,6 +726,7 @@ export class S3BucketUtil {
                             ...content,
                             Name: filename,
                             Path: fullPath,
+                            Location: `${this.link}${content.Key}`,
                             LastModified: new Date(content.LastModified),
                         } as ContentFile & { Name: string; Path: string });
                     }
@@ -785,6 +788,7 @@ export class S3BucketUtil {
             treeNode.children.push({
                 path: '/' + file.Key,
                 name: file.Name,
+                location: `${this.link}${file.Key}`,
                 type: 'file',
                 size: file.Size,
                 lastModified: file.LastModified,
@@ -814,7 +818,10 @@ export class S3BucketUtil {
         return await this.execute<HeadObjectCommandOutput>(command);
     }
 
-    async fileListInfo(directoryPath?: string, fileNamePrefix?: string): Promise<ContentFile[]> {
+    async fileListInfo(
+        directoryPath?: string,
+        fileNamePrefix?: string
+    ): Promise<(ContentFile & { Location: string })[]> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';
@@ -829,15 +836,16 @@ export class S3BucketUtil {
 
         const result = await this.execute<ListObjectsCommandOutput>(command);
 
-        const files = (result.Contents ?? ([] as ContentFile[]))
+        const files = (result.Contents ?? ([] as (ContentFile & { Location: string })[]))
             .filter((v) => v)
             .map(
                 (content) =>
                     ({
                         ...content,
                         Name: content.Key?.replace(prefix, '') ?? content.Key,
+                        Location: `${this.link}${content.Key}`,
                         LastModified: content.LastModified ? new Date(content.LastModified) : null,
-                    }) as ContentFile
+                    }) as ContentFile & { Location: string }
             )
             .filter((content) => content.Name);
 
@@ -853,7 +861,7 @@ export class S3BucketUtil {
             pageNumber = 0, // 0-based: page 0 = items 0-99, page 1 = items 100-199, page 2 = items 200-299
             pageSize = 100,
         }: { fileNamePrefix?: string; pageSize?: number; pageNumber?: number } = {}
-    ): Promise<{ files: ContentFile[]; totalFetched: number }> {
+    ): Promise<{ files: (ContentFile & { Location: string })[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';
@@ -862,7 +870,7 @@ export class S3BucketUtil {
 
         let continuationToken: string | undefined;
         let currentPage = 0;
-        let resultFiles: ContentFile[] = [];
+        let resultFiles: (ContentFile & { Location: string })[] = [];
 
         // Loop through pages until we reach the target page
         while (currentPage <= pageNumber) {
@@ -878,15 +886,16 @@ export class S3BucketUtil {
 
             // If we're at the target page, extract the data
             if (currentPage === pageNumber) {
-                resultFiles = (result.Contents ?? ([] as ContentFile[]))
+                resultFiles = ((result.Contents ?? []) as (ContentFile & { Location: string })[])
                     .filter((v) => v)
                     .map(
                         (content) =>
                             ({
                                 ...content,
                                 Name: content.Key?.replace(prefix, '') ?? content.Key,
+                                Location: `${this.link}${content.Key}`,
                                 LastModified: content.LastModified ? new Date(content.LastModified) : null,
-                            }) as ContentFile
+                            }) as ContentFile & { Location: string }
                     )
                     .filter((content) => content.Name);
             }
