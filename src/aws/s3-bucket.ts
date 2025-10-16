@@ -677,7 +677,12 @@ export class S3BucketUtil {
                             ContinuationToken: continuationToken,
                         })
                     ),
-                    // todo: it's going to make some bugs here, because we got the fileResponse.NextContinuationToken and not consider to the NextContinuationToken of the seconds response, that mean we pull the same directory again and again, hopefully aws fill fixing that bug to make separate calls on the root level
+                    // todo:    it's going to make some bugs here,
+                    //          because we got the fileResponse.NextContinuationToken
+                    //          and not consider to the NextContinuationToken of the seconds response,
+                    //          that mean we pull the same directory again and again,
+                    //          therefore I pull all directory once, instead of logic to iterate theme..
+                    //          hopefully aws fill fixing that bug to make separate calls on the root level
                     await this.execute<ListObjectsV2CommandOutput>(
                         new ListObjectsV2Command({
                             Bucket: this.bucket,
