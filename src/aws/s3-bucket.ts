@@ -688,7 +688,7 @@ export class S3BucketUtil {
                             Bucket: this.bucket,
                             Prefix: '',
                             Delimiter: '/',
-                            MaxKeys: 1000, // on production buckets it's work fine :/ and not need to this
+                            MaxKeys: 1000,
                             ContinuationToken: continuationToken,
                         })
                     ),
@@ -926,10 +926,15 @@ export class S3BucketUtil {
             fileNamePrefix,
             pageNumber = 0, // 0-based: page 0 = items 0-99, page 1 = items 100-199, page 2 = items 200-299
             pageSize = 100,
-        }: { fileNamePrefix?: string; pageSize?: number; pageNumber?: number } = {}
+            localstack,
+        }: { fileNamePrefix?: string; pageSize?: number; pageNumber?: number; localstack?: boolean } = {}
     ): Promise<{ files: (ContentFile & { Location: string })[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else {
+            // Must filter by '/' to find files on root // THERE IS A DIFF BETWEEN LOCALSTACK TO AWS!! IN LOCALSTACK NEED THIS LINE, IN AWS it must by without this!
+            if (localstack) normalizedPath = '/';
+        }
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
