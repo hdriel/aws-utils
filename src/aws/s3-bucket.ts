@@ -667,7 +667,7 @@ export class S3BucketUtil {
             let result: ListObjectsV2CommandOutput;
 
             if (normalizedPath === '/') {
-                const [fileResponse, { CommonPrefixes }] = await Promise.all([
+                const [fileResponse, { Contents, CommonPrefixes }] = await Promise.all([
                     this.execute<ListObjectsV2CommandOutput>(
                         new ListObjectsV2Command({
                             Bucket: this.bucket,
@@ -695,6 +695,9 @@ export class S3BucketUtil {
                 ]);
 
                 result = fileResponse;
+                if (Contents?.length) {
+                    result.Contents?.push(...Contents);
+                }
                 result.CommonPrefixes = CommonPrefixes;
             } else {
                 result = await this.execute<ListObjectsV2CommandOutput>(
@@ -1020,9 +1023,8 @@ export class S3BucketUtil {
     }
 
     async fileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
-        const normalizedKey = getNormalizedPath(filePath);
+        let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-
         const expiresInSeconds = typeof expiresIn === 'number' ? expiresIn : ms(expiresIn) / 1000;
 
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
@@ -1081,8 +1083,9 @@ export class S3BucketUtil {
     }
 
     async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
-        const normalizedKey = getNormalizedPath(filePath);
+        let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+        if (!normalizedKey.includes('/')) normalizedKey = '/' + normalizedKey;
 
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         const result = await this.execute<GetObjectCommandOutput>(command);
@@ -1887,4 +1890,87 @@ export class S3BucketUtil {
             });
         };
     }
+
+    getImageFileViewCtrl = ({
+        queryField = 'file',
+        cachingAge = 31536000,
+    }: { queryField?: string; cachingAge?: number } = {}) => {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            let fileKey = req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined;
+            if (!fileKey) {
+                this.logger?.warn(req.id, 'image file view required file query field', {
+                    fileKey: req.query?.[queryField],
+                    queryField,
+                });
+
+                next('image file key is required');
+                return;
+            }
+
+            try {
+                const imageBuffer = await this.fileContent(fileKey, 'buffer');
+                const ext = path.extname(fileKey).slice(1).toLowerCase();
+
+                const mimeTypeMap: Record<string, string> = {
+                    jpg: 'image/jpeg',
+                    jpeg: 'image/jpeg',
+                    png: 'image/png',
+                    gif: 'image/gif',
+                    webp: 'image/webp',
+                    svg: 'image/svg+xml',
+                    ico: 'image/x-icon',
+                };
+
+                const contentType = mimeTypeMap[ext] || 'application/octet-stream';
+                res.setHeader('Content-Type', contentType);
+                if (cachingAge) res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                res.setHeader('Content-Length', imageBuffer.length);
+
+                res.status(200).send(imageBuffer);
+            } catch (error: any) {
+                this.logger?.warn(req.id, 'image view fileKey not found', { fileKey });
+                next(`Failed to retrieve image file: ${error.message}`);
+            }
+        };
+    };
+
+    getPdfFileViewCtrl = ({
+        queryField = 'file',
+        cachingAge = 31536000,
+    }: { queryField?: string; cachingAge?: number } = {}) => {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            const fileKey = req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined;
+            if (!fileKey) {
+                next('pdf file key is required');
+                return;
+            }
+
+            try {
+                const fileBuffer = await this.fileContent(fileKey, 'buffer');
+                const ext = path.extname(fileKey).slice(1).toLowerCase();
+
+                const mimeTypeMap: Record<string, string> = {
+                    pdf: 'application/pdf',
+                    txt: 'text/plain',
+                    doc: 'application/msword',
+                    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    xls: 'application/vnd.ms-excel',
+                    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    ppt: 'application/vnd.ms-powerpoint',
+                    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                };
+
+                const contentType = mimeTypeMap[ext] || 'application/octet-stream';
+
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Content-Disposition', `inline; filename="${path.basename(fileKey)}"`);
+                res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                res.setHeader('Content-Length', fileBuffer.length);
+
+                res.status(200).send(fileBuffer);
+            } catch (error: any) {
+                next(`Failed to retrieve pdf file: ${error.message}`);
+            }
+        };
+    };
 }
