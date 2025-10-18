@@ -688,16 +688,15 @@ export class S3BucketUtil {
                             Bucket: this.bucket,
                             Prefix: '',
                             Delimiter: '/',
-                            MaxKeys: 1000,
+                            MaxKeys: 1000, // on production buckets it's work fine :/ and not need to this
                             ContinuationToken: continuationToken,
                         })
                     ),
                 ]);
 
                 result = fileResponse;
-                if (Contents?.length) {
-                    result.Contents?.push(...Contents);
-                }
+                result.Contents ||= [];
+                if (Contents?.length) result.Contents?.push(...Contents);
                 result.CommonPrefixes = CommonPrefixes;
             } else {
                 result = await this.execute<ListObjectsV2CommandOutput>(
@@ -931,7 +930,6 @@ export class S3BucketUtil {
     ): Promise<{ files: (ContentFile & { Location: string })[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/'; // Must filter by '/' to find files on root
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
