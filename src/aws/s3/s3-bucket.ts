@@ -68,6 +68,8 @@ export class S3Bucket {
 
     public readonly reqId: string | null;
 
+    protected static leadingSlash: boolean = false;
+
     constructor({
         logger,
         bucket,
@@ -86,7 +88,7 @@ export class S3Bucket {
         };
         this.endpoint = endpoint;
         this.region = region;
-        this._bucket = bucket;
+        this._bucket = decodeURIComponent(bucket);
         this.logger = logger;
         this.reqId = reqId ?? null;
 
@@ -119,7 +121,7 @@ export class S3Bucket {
     }
 
     changeBucket(bucket: string) {
-        this._bucket = bucket;
+        this._bucket = decodeURIComponent(bucket);
         this.initializedBucket = '';
     }
 
