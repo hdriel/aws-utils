@@ -160,7 +160,7 @@ export class S3File extends S3Directory {
         try {
             normalizedKey = getNormalizedPath(filePath);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-            if (S3File.leadingSlash) normalizedKey = `/${normalizedKey}`;
+            if (this.localstack) normalizedKey = `/${normalizedKey}`;
 
             const command = new PutObjectTaggingCommand({
                 Bucket: this.bucket,
@@ -249,10 +249,10 @@ export class S3File extends S3Directory {
         }
     }
 
+    // todo: checked!
     async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
         let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-        if (!normalizedKey.includes('/')) normalizedKey = '/' + normalizedKey;
 
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
         const result = await this.execute<GetObjectCommandOutput>(command);

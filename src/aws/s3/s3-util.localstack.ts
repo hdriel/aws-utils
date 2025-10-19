@@ -12,7 +12,8 @@ type S3LocalstackUtilProps = S3UtilProps;
 
 export class S3LocalstackUtil extends S3Util {
     constructor(props: S3LocalstackUtilProps) {
-        super(props);
+        // @ts-ignore
+        super({ ...props, localstack: true });
     }
 
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {

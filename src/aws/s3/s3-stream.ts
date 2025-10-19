@@ -48,7 +48,7 @@ export class S3Stream extends S3File {
     ): Promise<Readable | null> {
         let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-        if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
+        // if (this.localstack && !normalizedKey.includes('/')) normalizedKey = `/${normalizedKey}`;
 
         if (checkFileExists) {
             const isExists = await this.fileExists(normalizedKey);
@@ -70,6 +70,7 @@ export class S3Stream extends S3File {
         return response.Body as Readable;
     }
 
+    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
     protected async streamVideoFile({
         filePath,
         Range,
@@ -91,7 +92,6 @@ export class S3Stream extends S3File {
     } | null> {
         let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-        if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
 
         try {
             const cmd = new GetObjectCommand({
@@ -127,6 +127,339 @@ export class S3Stream extends S3File {
         }
     }
 
+    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
+    async getStreamVideoFileCtrl({
+        fileKey,
+        allowedWhitelist,
+        contentType = 'video/mp4',
+        streamTimeoutMS = 30_000,
+        bufferMB = 5,
+    }: {
+        contentType?: string;
+        fileKey: string;
+        allowedWhitelist?: string[];
+        bufferMB?: number | undefined;
+        streamTimeoutMS?: number | undefined;
+    }) {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            let normalizedKey = getNormalizedPath(fileKey);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+
+            const isExists = await this.fileExists(normalizedKey);
+            const fileSize = await this.sizeOf(normalizedKey);
+            let Range;
+
+            if (!isExists) {
+                next(Error(`File does not exist: "${normalizedKey}"`));
+                return;
+            }
+
+            try {
+                if (req.method === 'HEAD') {
+                    res.setHeader('Content-Type', contentType);
+                    res.setHeader('Accept-Ranges', 'bytes');
+                    if (fileSize) res.setHeader('Content-Length', String(fileSize));
+                    return res.status(200).end();
+                }
+
+                const bufferSize = bufferMB;
+                const CHUNK_SIZE = 10 ** 6 * bufferSize;
+
+                const rangeValues = parseRangeHeader(req.headers.range, fileSize, CHUNK_SIZE);
+                let [start, end] = rangeValues || [];
+                if (!rangeValues || start < 0 || start >= fileSize || end < 0 || end >= fileSize || start > end) {
+                    res.status(416).send('Requested Range Not Satisfiable');
+                    return;
+                }
+
+                res.statusCode = 206;
+                const chunkLength = end - start + 1;
+                res.setHeader('Content-Length', chunkLength);
+                res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+                res.setHeader('Accept-Ranges', 'bytes');
+
+                res.setHeader('Content-Type', 'video/mp4');
+                Range = `bytes=${start}-${end}`;
+            } catch (error) {
+                next(error);
+                return;
+            }
+
+            const abort = new AbortController();
+            const onClose = () => abort.abort();
+            req.once('close', onClose);
+
+            try {
+                const result = await this.streamVideoFile({
+                    filePath: normalizedKey,
+                    Range,
+                    abortSignal: abort.signal,
+                });
+                const { body, meta } = result as any;
+
+                const origin = Array.isArray(allowedWhitelist)
+                    ? allowedWhitelist.includes(req.headers.origin ?? '')
+                        ? req.headers.origin!
+                        : undefined
+                    : allowedWhitelist;
+
+                if (origin) {
+                    res.setHeader('Access-Control-Allow-Origin', origin);
+                    res.setHeader('Vary', 'Origin');
+                }
+
+                const finalContentType = contentType.startsWith('video/') ? contentType : `video/${contentType}`;
+                res.setHeader('Content-Type', meta.contentType ?? finalContentType);
+                res.setHeader('Accept-Ranges', meta.acceptRanges ?? 'bytes');
+
+                if (Range && meta.contentRange) {
+                    res.status(206);
+                    res.setHeader('Content-Range', meta.contentRange);
+                    if (typeof meta.contentLength === 'number') {
+                        res.setHeader('Content-Length', String(meta.contentLength));
+                    }
+                } else if (fileSize) {
+                    res.setHeader('Content-Length', String(fileSize));
+                }
+
+                if (meta.etag) res.setHeader('ETag', meta.etag);
+                if (meta.lastModified) res.setHeader('Last-Modified', meta.lastModified.toUTCString());
+
+                const timeout = setTimeout(() => {
+                    abort.abort();
+                    if (!res.headersSent) res.status(504);
+                    res.end();
+                }, streamTimeoutMS);
+
+                res.once('close', () => {
+                    clearTimeout(timeout);
+                    body.destroy?.();
+                    req.off('close', onClose);
+                });
+
+                await pump(body, res);
+
+                clearTimeout(timeout);
+            } catch (error: any) {
+                const isBenignStreamError =
+                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+                    error?.name === 'AbortError' ||
+                    error?.code === 'ECONNRESET';
+
+                if (isBenignStreamError) {
+                    return;
+                }
+
+                if (!res.headersSent) {
+                    this.logger?.warn(req.id, 'caught exception in stream controller', {
+                        error: error?.message ?? String(error),
+                        key: fileKey,
+                        url: req.originalUrl,
+                        userId: req.user?._id,
+                    });
+
+                    next(error);
+                    return;
+                }
+
+                if (!res.writableEnded) {
+                    try {
+                        res.end();
+                    } catch {}
+                }
+
+                return;
+            }
+        };
+    }
+
+    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
+    getImageFileViewCtrl = ({
+        fileKey: _fileKey,
+        queryField = 'file',
+        cachingAge = 31536000,
+    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            let fileKey =
+                _fileKey ||
+                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
+
+            if (!fileKey || fileKey === '/') {
+                this.logger?.warn(req.id, 'image file view required file query field', {
+                    fileKey: req.query?.[queryField],
+                    queryField,
+                });
+
+                next('image file key is required');
+                return;
+            }
+
+            try {
+                const imageBuffer = await this.fileContent(fileKey, 'buffer');
+                const ext = path.extname(fileKey).slice(1).toLowerCase();
+
+                const mimeTypeMap: Record<string, string> = {
+                    jpg: 'image/jpeg',
+                    jpeg: 'image/jpeg',
+                    png: 'image/png',
+                    gif: 'image/gif',
+                    webp: 'image/webp',
+                    svg: 'image/svg+xml',
+                    ico: 'image/x-icon',
+                };
+
+                const contentType = mimeTypeMap[ext] || 'application/octet-stream';
+                res.setHeader('Content-Type', contentType);
+                if (cachingAge) res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                res.setHeader('Content-Length', imageBuffer.length);
+
+                res.status(200).send(imageBuffer);
+            } catch (error: any) {
+                this.logger?.warn(req.id, 'image view fileKey not found', {
+                    fileKey,
+                    localstack: this.localstack,
+                });
+                next(`Failed to retrieve image file: ${error.message}`);
+            }
+        };
+    };
+
+    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
+    getPdfFileViewCtrl = ({
+        fileKey: _fileKey,
+        queryField = 'file',
+        cachingAge = 31536000,
+    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            let fileKey =
+                _fileKey ||
+                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
+
+            if (!fileKey) {
+                next('pdf file key is required');
+                return;
+            }
+
+            try {
+                // if (this.localstack && !fileKey.includes('/')) fileKey = `/${fileKey}`;
+
+                const fileBuffer = await this.fileContent(fileKey, 'buffer');
+                const ext = path.extname(fileKey).slice(1).toLowerCase();
+
+                const mimeTypeMap: Record<string, string> = {
+                    pdf: 'application/pdf',
+                    txt: 'text/plain',
+                    doc: 'application/msword',
+                    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    xls: 'application/vnd.ms-excel',
+                    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    ppt: 'application/vnd.ms-powerpoint',
+                    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                };
+
+                const contentType = mimeTypeMap[ext] || 'application/octet-stream';
+
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Content-Disposition', `inline; filename="${path.basename(fileKey)}"`);
+                res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                res.setHeader('Content-Length', fileBuffer.length);
+
+                res.status(200).send(fileBuffer);
+            } catch (error: any) {
+                next(`Failed to retrieve pdf file: ${error.message}`);
+            }
+        };
+    };
+
+    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
+    async getStreamFileCtrl({ filePath, filename }: { filePath: string; filename?: string }) {
+        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            const abort = new AbortController();
+            let stream: Readable | null = null;
+
+            const onClose = () => {
+                abort.abort();
+                stream?.destroy?.();
+            };
+
+            req.once('close', onClose);
+
+            let normalizedKey = getNormalizedPath(filePath);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+
+            try {
+                const isExists = await this.fileExists(normalizedKey);
+                if (!isExists) {
+                    req.off('close', onClose);
+                    next(Error(`File not found: "${normalizedKey}"`));
+                    return;
+                }
+
+                stream = await this.streamObjectFile(normalizedKey, {
+                    abortSignal: abort.signal,
+                    checkFileExists: false,
+                });
+
+                if (!stream) {
+                    req.off('close', onClose);
+                    next(Error(`Failed to get file stream: "${normalizedKey}"`));
+                    return;
+                }
+
+                const fileInfo = await this.fileInfo(normalizedKey);
+                const fileName = filename || normalizedKey.split('/').pop() || 'download';
+
+                res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+                if (fileInfo.ContentLength) {
+                    res.setHeader('Content-Length', String(fileInfo.ContentLength));
+                }
+
+                stream.on('error', (err) => {
+                    this.logger?.warn(this.reqId, 'Stream error', { filePath: normalizedKey, error: err });
+                    abort.abort();
+                    stream?.destroy?.();
+                });
+
+                res.once('close', () => {
+                    stream?.destroy?.();
+                    req.off('close', onClose);
+                });
+
+                await pump(stream, res);
+
+                req.off('close', onClose);
+            } catch (error: any) {
+                abort.abort();
+                if (stream) {
+                    stream.destroy?.();
+                }
+
+                const isBenignStreamError =
+                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+                    error?.name === 'AbortError' ||
+                    error?.code === 'ECONNRESET';
+
+                if (isBenignStreamError) {
+                    return;
+                }
+
+                this.logger?.error(this.reqId, 'Failed to stream file', { filePath: normalizedKey, error });
+
+                if (!res.headersSent) {
+                    next(error);
+                } else if (!res.writableEnded) {
+                    try {
+                        res.end();
+                    } catch {}
+                }
+            } finally {
+                req.off('close', onClose);
+            }
+        };
+    }
+
+    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
     async getStreamZipFileCtr({
         filePath,
         filename: _filename,
@@ -140,7 +473,6 @@ export class S3Stream extends S3File {
             const filePaths = ([] as string[])
                 .concat(filePath as string[])
                 .map((filePath) => getNormalizedPath(filePath))
-                .map((normalizedKey) => (S3Stream.leadingSlash ? `/${normalizedKey}` : normalizedKey))
                 .filter((v) => v && v !== '/');
 
             if (!filePaths.length) {
@@ -288,242 +620,6 @@ export class S3Stream extends S3File {
                 }
             } finally {
                 req.off('close', onClose);
-            }
-        };
-    }
-
-    async getStreamFileCtrl({ filePath, filename }: { filePath: string; filename?: string }) {
-        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const abort = new AbortController();
-            let stream: Readable | null = null;
-
-            const onClose = () => {
-                abort.abort();
-                stream?.destroy?.();
-            };
-
-            req.once('close', onClose);
-
-            let normalizedKey = getNormalizedPath(filePath);
-            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-            if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
-
-            try {
-                const isExists = await this.fileExists(normalizedKey);
-                if (!isExists) {
-                    req.off('close', onClose);
-                    next(Error(`File not found: "${normalizedKey}"`));
-                    return;
-                }
-
-                stream = await this.streamObjectFile(normalizedKey, {
-                    abortSignal: abort.signal,
-                    checkFileExists: false,
-                });
-
-                if (!stream) {
-                    req.off('close', onClose);
-                    next(Error(`Failed to get file stream: "${normalizedKey}"`));
-                    return;
-                }
-
-                const fileInfo = await this.fileInfo(normalizedKey);
-                const fileName = filename || normalizedKey.split('/').pop() || 'download';
-
-                res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
-                res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-                if (fileInfo.ContentLength) {
-                    res.setHeader('Content-Length', String(fileInfo.ContentLength));
-                }
-
-                stream.on('error', (err) => {
-                    this.logger?.warn(this.reqId, 'Stream error', { filePath: normalizedKey, error: err });
-                    abort.abort();
-                    stream?.destroy?.();
-                });
-
-                res.once('close', () => {
-                    stream?.destroy?.();
-                    req.off('close', onClose);
-                });
-
-                await pump(stream, res);
-
-                req.off('close', onClose);
-            } catch (error: any) {
-                abort.abort();
-                if (stream) {
-                    stream.destroy?.();
-                }
-
-                const isBenignStreamError =
-                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
-                    error?.name === 'AbortError' ||
-                    error?.code === 'ECONNRESET';
-
-                if (isBenignStreamError) {
-                    return;
-                }
-
-                this.logger?.error(this.reqId, 'Failed to stream file', { filePath: normalizedKey, error });
-
-                if (!res.headersSent) {
-                    next(error);
-                } else if (!res.writableEnded) {
-                    try {
-                        res.end();
-                    } catch {}
-                }
-            } finally {
-                req.off('close', onClose);
-            }
-        };
-    }
-
-    async getStreamVideoFileCtrl({
-        fileKey,
-        allowedWhitelist,
-        contentType = 'video/mp4',
-        streamTimeoutMS = 30_000,
-        bufferMB = 5,
-    }: {
-        contentType?: string;
-        fileKey: string;
-        allowedWhitelist?: string[];
-        bufferMB?: number | undefined;
-        streamTimeoutMS?: number | undefined;
-    }) {
-        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            let normalizedKey = getNormalizedPath(fileKey);
-            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-            if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
-
-            const isExists = await this.fileExists(normalizedKey);
-            const fileSize = await this.sizeOf(normalizedKey);
-            let Range;
-
-            if (!isExists) {
-                next(Error(`File does not exist: "${normalizedKey}"`));
-                return;
-            }
-
-            try {
-                if (req.method === 'HEAD') {
-                    res.setHeader('Content-Type', contentType);
-                    res.setHeader('Accept-Ranges', 'bytes');
-                    if (fileSize) res.setHeader('Content-Length', String(fileSize));
-                    return res.status(200).end();
-                }
-
-                // const bss = +(req.query.bufferStreamingSizeInMB ?? 0);
-                // const bufferSize = bss > 0 && bss <= 50 ? bss : (bufferMB ?? 5);
-                const bufferSize = bufferMB;
-                const CHUNK_SIZE = 10 ** 6 * bufferSize;
-
-                const rangeValues = parseRangeHeader(req.headers.range, fileSize, CHUNK_SIZE);
-                let [start, end] = rangeValues || [];
-                if (!rangeValues || start < 0 || start >= fileSize || end < 0 || end >= fileSize || start > end) {
-                    res.status(416).send('Requested Range Not Satisfiable');
-                    return;
-                }
-
-                res.statusCode = 206;
-                const chunkLength = end - start + 1;
-                res.setHeader('Content-Length', chunkLength);
-                res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
-                res.setHeader('Accept-Ranges', 'bytes');
-
-                res.setHeader('Content-Type', 'video/mp4');
-                Range = `bytes=${start}-${end}`;
-            } catch (error) {
-                next(error);
-                return;
-            }
-
-            const abort = new AbortController();
-            const onClose = () => abort.abort();
-            req.once('close', onClose);
-
-            try {
-                const result = await this.streamVideoFile({
-                    filePath: normalizedKey,
-                    Range,
-                    abortSignal: abort.signal,
-                });
-                const { body, meta } = result as any;
-
-                const origin = Array.isArray(allowedWhitelist)
-                    ? allowedWhitelist.includes(req.headers.origin ?? '')
-                        ? req.headers.origin!
-                        : undefined
-                    : allowedWhitelist;
-
-                if (origin) {
-                    res.setHeader('Access-Control-Allow-Origin', origin);
-                    res.setHeader('Vary', 'Origin');
-                }
-
-                const finalContentType = contentType.startsWith('video/') ? contentType : `video/${contentType}`;
-                res.setHeader('Content-Type', meta.contentType ?? finalContentType);
-                res.setHeader('Accept-Ranges', meta.acceptRanges ?? 'bytes');
-
-                if (Range && meta.contentRange) {
-                    res.status(206);
-                    res.setHeader('Content-Range', meta.contentRange);
-                    if (typeof meta.contentLength === 'number') {
-                        res.setHeader('Content-Length', String(meta.contentLength));
-                    }
-                } else if (fileSize) {
-                    res.setHeader('Content-Length', String(fileSize));
-                }
-
-                if (meta.etag) res.setHeader('ETag', meta.etag);
-                if (meta.lastModified) res.setHeader('Last-Modified', meta.lastModified.toUTCString());
-
-                const timeout = setTimeout(() => {
-                    abort.abort();
-                    if (!res.headersSent) res.status(504);
-                    res.end();
-                }, streamTimeoutMS);
-
-                res.once('close', () => {
-                    clearTimeout(timeout);
-                    body.destroy?.();
-                    req.off('close', onClose);
-                });
-
-                await pump(body, res);
-
-                clearTimeout(timeout);
-            } catch (error: any) {
-                const isBenignStreamError =
-                    error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
-                    error?.name === 'AbortError' ||
-                    error?.code === 'ECONNRESET';
-
-                if (isBenignStreamError) {
-                    return;
-                }
-
-                if (!res.headersSent) {
-                    this.logger?.warn(req.id, 'caught exception in stream controller', {
-                        error: error?.message ?? String(error),
-                        key: fileKey,
-                        url: req.originalUrl,
-                        userId: req.user?._id,
-                    });
-
-                    next(error);
-                    return;
-                }
-
-                if (!res.writableEnded) {
-                    try {
-                        res.end();
-                    } catch {}
-                }
-
-                return;
             }
         };
     }
@@ -676,6 +772,44 @@ export class S3Stream extends S3File {
     }
 
     /**
+     * Middleware for uploading any files (mixed field names)
+     * Adds the uploaded files info to req.s3AllFiles
+     */
+    uploadAnyFiles(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
+        let normalizedPath = getNormalizedPath(directoryPath);
+        if (normalizedPath !== '/' && normalizedPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
+
+        const upload = this.getUploadFileMW(normalizedPath, options);
+
+        return (req: Request & { s3AllFiles?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
+            const anyUpload: RequestHandler & any = maxCount ? upload.any() : upload.any();
+
+            anyUpload(req, res, (err: any) => {
+                if (err) {
+                    this.logger?.error(this.reqId, 'Any files upload error', { error: err.message });
+                    return next(err);
+                }
+
+                if (req.files && Array.isArray(req.files)) {
+                    req.s3AllFiles = req.files as UploadedS3File[];
+
+                    if (maxCount && req.s3AllFiles.length > maxCount) {
+                        return next(new Error(`Too many files uploaded. Maximum is ${maxCount}`));
+                    }
+
+                    this.logger?.info(this.reqId, 'Any files uploaded successfully', {
+                        count: req.s3AllFiles.length,
+                        keys: req.s3AllFiles.map((f: any) => f.key),
+                    });
+                }
+
+                next();
+            });
+        };
+    }
+
+    /**
      * Middleware for uploading multiple files with different field names
      * Adds the uploaded files info to req.s3FilesByField
      */
@@ -726,136 +860,4 @@ export class S3Stream extends S3File {
     //         });
     //     };
     // }
-
-    /**
-     * Middleware for uploading any files (mixed field names)
-     * Adds the uploaded files info to req.s3AllFiles
-     */
-    uploadAnyFiles(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
-        let normalizedPath = getNormalizedPath(directoryPath);
-        if (normalizedPath !== '/' && normalizedPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
-
-        const upload = this.getUploadFileMW(normalizedPath, options);
-
-        return (req: Request & { s3AllFiles?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
-            const anyUpload: RequestHandler & any = maxCount ? upload.any() : upload.any();
-
-            anyUpload(req, res, (err: any) => {
-                if (err) {
-                    this.logger?.error(this.reqId, 'Any files upload error', { error: err.message });
-                    return next(err);
-                }
-
-                if (req.files && Array.isArray(req.files)) {
-                    req.s3AllFiles = req.files as UploadedS3File[];
-
-                    if (maxCount && req.s3AllFiles.length > maxCount) {
-                        return next(new Error(`Too many files uploaded. Maximum is ${maxCount}`));
-                    }
-
-                    this.logger?.info(this.reqId, 'Any files uploaded successfully', {
-                        count: req.s3AllFiles.length,
-                        keys: req.s3AllFiles.map((f: any) => f.key),
-                    });
-                }
-
-                next();
-            });
-        };
-    }
-
-    getImageFileViewCtrl = ({
-        fileKey: _fileKey,
-        queryField = 'file',
-        cachingAge = 31536000,
-    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
-        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            let fileKey =
-                _fileKey ||
-                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
-
-            if (!fileKey) {
-                this.logger?.warn(req.id, 'image file view required file query field', {
-                    fileKey: req.query?.[queryField],
-                    queryField,
-                });
-
-                next('image file key is required');
-                return;
-            }
-
-            try {
-                if (S3Stream.leadingSlash && !fileKey.startsWith('/')) fileKey = `/${fileKey}`;
-
-                const imageBuffer = await this.fileContent(fileKey, 'buffer');
-                const ext = path.extname(fileKey).slice(1).toLowerCase();
-
-                const mimeTypeMap: Record<string, string> = {
-                    jpg: 'image/jpeg',
-                    jpeg: 'image/jpeg',
-                    png: 'image/png',
-                    gif: 'image/gif',
-                    webp: 'image/webp',
-                    svg: 'image/svg+xml',
-                    ico: 'image/x-icon',
-                };
-
-                const contentType = mimeTypeMap[ext] || 'application/octet-stream';
-                res.setHeader('Content-Type', contentType);
-                if (cachingAge) res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
-                res.setHeader('Content-Length', imageBuffer.length);
-
-                res.status(200).send(imageBuffer);
-            } catch (error: any) {
-                this.logger?.warn(req.id, 'image view fileKey not found', { fileKey });
-                next(`Failed to retrieve image file: ${error.message}`);
-            }
-        };
-    };
-
-    getPdfFileViewCtrl = ({
-        fileKey: _fileKey,
-        queryField = 'file',
-        cachingAge = 31536000,
-    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
-        return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            let fileKey =
-                _fileKey ||
-                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
-
-            if (!fileKey) {
-                next('pdf file key is required');
-                return;
-            }
-
-            try {
-                if (S3Stream.leadingSlash && !fileKey.startsWith('/')) fileKey = `/${fileKey}`;
-                const fileBuffer = await this.fileContent(fileKey, 'buffer');
-                const ext = path.extname(fileKey).slice(1).toLowerCase();
-
-                const mimeTypeMap: Record<string, string> = {
-                    pdf: 'application/pdf',
-                    txt: 'text/plain',
-                    doc: 'application/msword',
-                    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    xls: 'application/vnd.ms-excel',
-                    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    ppt: 'application/vnd.ms-powerpoint',
-                    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                };
-
-                const contentType = mimeTypeMap[ext] || 'application/octet-stream';
-
-                res.setHeader('Content-Type', contentType);
-                res.setHeader('Content-Disposition', `inline; filename="${path.basename(fileKey)}"`);
-                res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
-                res.setHeader('Content-Length', fileBuffer.length);
-
-                res.status(200).send(fileBuffer);
-            } catch (error: any) {
-                next(`Failed to retrieve pdf file: ${error.message}`);
-            }
-        };
-    };
 }

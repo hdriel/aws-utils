@@ -1,7 +1,3 @@
-import type { Logger } from 'stack-trace-logger';
-import http from 'http';
-import https from 'https';
-import { NodeHttpHandler } from '@smithy/node-http-handler';
 import {
     CreateBucketCommand,
     DeleteBucketCommand,
@@ -16,7 +12,6 @@ import {
     ListObjectsV2Command,
     PutBucketPolicyCommand,
     PutPublicAccessBlockCommand,
-    S3Client,
     type Bucket,
     type CreateBucketCommandInput,
     type CreateBucketCommandOutput,
@@ -36,84 +31,27 @@ import {
     type PublicAccessBlockConfiguration,
     type PutBucketPolicyCommandOutput,
     type PutPublicAccessBlockCommandOutput,
-    type ServiceOutputTypes,
 } from '@aws-sdk/client-s3';
 import { ACLs } from '../../utils/consts';
-import { AWSConfigSharingUtil } from '../configuration';
 import type { BucketInfo } from '../../interfaces';
+import { S3Base, type S3BaseProps } from './s3-base';
 
-export interface S3BucketProps {
-    logger?: Logger;
-    bucket: string;
-    reqId?: string;
-    accessKeyId?: string;
-    secretAccessKey?: string;
-    endpoint?: string;
-    region?: string;
-    s3ForcePathStyle?: boolean;
-}
+export type S3BucketProps = S3BaseProps & { bucket: string };
 
-export class S3Bucket {
-    public readonly s3Client: S3Client;
-
+export class S3Bucket extends S3Base {
     public _bucket: string;
 
     public initializedBucket: string = '';
 
-    public readonly endpoint: string;
-
-    public readonly region: string;
-
-    public readonly logger?: Logger;
-
-    public readonly reqId: string | null;
-
-    protected static leadingSlash: boolean = false;
-
-    constructor({
-        logger,
-        bucket,
-        reqId,
-        accessKeyId = AWSConfigSharingUtil.accessKeyId,
-        secretAccessKey = AWSConfigSharingUtil.secretAccessKey,
-        endpoint = AWSConfigSharingUtil.endpoint,
-        region = AWSConfigSharingUtil.region,
-        s3ForcePathStyle = true,
-    }: S3BucketProps) {
-        const credentials = { accessKeyId, secretAccessKey };
-        const options = {
-            ...(accessKeyId && secretAccessKey && { credentials }),
-            ...(endpoint && { endpoint }),
-            ...(region && { region }),
-        };
-        this.endpoint = endpoint;
-        this.region = region;
+    constructor({ bucket, ...props }: S3BucketProps) {
+        super(props);
         this._bucket = decodeURIComponent(bucket);
-        this.logger = logger;
-        this.reqId = reqId ?? null;
-
-        const s3ClientParams = {
-            ...options,
-            ...(s3ForcePathStyle && { forcePathStyle: s3ForcePathStyle }),
-            requestHandler: new NodeHttpHandler({
-                httpAgent: new http.Agent({ keepAlive: true, maxSockets: 300 }),
-                httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 300 }),
-                connectionTimeout: 3000,
-                socketTimeout: 30000,
-            }),
-        };
-        this.s3Client = new S3Client(s3ClientParams);
     }
 
     get link(): string {
         return this.endpoint === 'http://localhost:4566'
             ? `${this.endpoint}/${this.bucket}/`
             : `https://s3.${this.region}.amazonaws.com/${this.bucket}/`;
-    }
-
-    protected async execute<T = ServiceOutputTypes>(command: any, options?: any): Promise<T> {
-        // @ts-ignore
-        return this.s3Client.send(command, options);
     }
 
     get bucket() {
