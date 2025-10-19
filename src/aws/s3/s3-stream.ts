@@ -563,8 +563,6 @@ export class S3Stream extends S3File {
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';
 
-        if (S3Stream.leadingSlash && !normalizedPath.startsWith('/')) normalizedPath = `/${normalizedPath}`;
-
         const fileSize = getFileSize(maxFileSize, this.maxUploadFileSizeRestriction);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
         const fileExts = ([] as FILE_EXT[]).concat(fileExt);
@@ -615,6 +613,7 @@ export class S3Stream extends S3File {
     uploadSingleFile(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         this.logger?.debug(null, '####### uploadSingleFile', { directoryPath, normalizedPath, fieldName });
 
@@ -650,6 +649,7 @@ export class S3Stream extends S3File {
     uploadMultipleFiles(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const upload = this.getUploadFileMW(normalizedPath, options);
 
@@ -679,52 +679,53 @@ export class S3Stream extends S3File {
      * Middleware for uploading multiple files with different field names
      * Adds the uploaded files info to req.s3FilesByField
      */
-    uploadFieldsFiles(
-        fields: Array<{ name: string; directory: string; maxCount?: number; options?: S3UploadOptions }>
-    ): RequestHandler {
-        // Create separate multer instances for each field (since each might have different options)
-        const fieldConfigs = fields.map((field) => {
-            const upload = this.getUploadFileMW(field.directory, field.options || {});
-            return {
-                name: field.name,
-                maxCount: field.maxCount || 1,
-                upload,
-                directory: field.directory,
-            };
-        });
-
-        return async (
-            req: Request & { s3FilesByField?: Record<string, UploadedS3File[]> } & any,
-            res: Response,
-            next: NextFunction & any
-        ) => {
-            // We'll use the first upload instance but with fields configuration
-            const multerFields = fieldConfigs.map((f) => ({ name: f.name, maxCount: f.maxCount }));
-            const upload = this.getUploadFileMW(fieldConfigs[0].directory);
-
-            const mw: RequestHandler & any = upload.fields(multerFields);
-            mw(req, res, (err: any) => {
-                if (err) {
-                    this.logger?.error(this.reqId, 'Fields upload error', { error: err.message });
-                    return next(err);
-                }
-
-                if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
-                    req.s3FilesByField = req.files as Record<string, UploadedS3File[]>;
-
-                    const uploadSummary = Object.entries(req.s3FilesByField).map(([field, files]: any) => ({
-                        field,
-                        count: files.length,
-                        keys: files.map((f: any) => f.key),
-                    }));
-
-                    this.logger?.info(this.reqId, 'Fields uploaded successfully', { uploadSummary });
-                }
-
-                next();
-            });
-        };
-    }
+    // uploadFieldsFiles(
+    //     fields: Array<{ name: string; directory: string; maxCount?: number; options?: S3UploadOptions }>
+    // ): RequestHandler {
+    //     // Create separate multer instances for each field (since each might have different options)
+    //     const fieldConfigs = fields.map((field) => {
+    //         const upload = this.getUploadFileMW(field.directory, field.options || {});
+    //
+    //         return {
+    //             name: getNormalizedPath(field.name),
+    //             directory: getNormalizedPath(field.directory),
+    //             maxCount: field.maxCount || 1,
+    //             upload,
+    //         };
+    //     });
+    //
+    //     return async (
+    //         req: Request & { s3FilesByField?: Record<string, UploadedS3File[]> } & any,
+    //         res: Response,
+    //         next: NextFunction & any
+    //     ) => {
+    //         // We'll use the first upload instance but with fields configuration
+    //         const multerFields = fieldConfigs.map((f) => ({ name: f.name, maxCount: f.maxCount }));
+    //         const upload = this.getUploadFileMW(fieldConfigs[0].directory);
+    //
+    //         const mw: RequestHandler & any = upload.fields(multerFields);
+    //         mw(req, res, (err: any) => {
+    //             if (err) {
+    //                 this.logger?.error(this.reqId, 'Fields upload error', { error: err.message });
+    //                 return next(err);
+    //             }
+    //
+    //             if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
+    //                 req.s3FilesByField = req.files as Record<string, UploadedS3File[]>;
+    //
+    //                 const uploadSummary = Object.entries(req.s3FilesByField).map(([field, files]: any) => ({
+    //                     field,
+    //                     count: files.length,
+    //                     keys: files.map((f: any) => f.key),
+    //                 }));
+    //
+    //                 this.logger?.info(this.reqId, 'Fields uploaded successfully', { uploadSummary });
+    //             }
+    //
+    //             next();
+    //         });
+    //     };
+    // }
 
     /**
      * Middleware for uploading any files (mixed field names)
@@ -732,7 +733,8 @@ export class S3Stream extends S3File {
      */
     uploadAnyFiles(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
         let normalizedPath = getNormalizedPath(directoryPath);
-        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        if (normalizedPath !== '/' && normalizedPath !== '' && directoryPath !== undefined) normalizedPath += '/';
+        else normalizedPath = '';
 
         const upload = this.getUploadFileMW(normalizedPath, options);
 

@@ -17,7 +17,7 @@ export const parseRangeHeader = (range: string | undefined, contentLength: numbe
 };
 
 export const getNormalizedPath = (directoryPath?: string) =>
-    decodeURIComponent(directoryPath?.replace(/^\/+/, '').replace(/\/+$/, '') || '');
+    decodeURIComponent(directoryPath?.trim().replace(/^\/+/, '').replace(/\/+$/, '') || '');
 
 export const getFileSize = (
     maxFileSize?: ByteUnitStringValue | number,
