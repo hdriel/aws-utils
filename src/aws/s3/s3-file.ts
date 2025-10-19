@@ -18,6 +18,7 @@ import {
     type ListObjectsCommandOutput,
     type ListObjectsV2CommandOutput,
     type PutObjectTaggingCommandOutput,
+    type Tag,
 } from '@aws-sdk/client-s3';
 import { getNormalizedPath } from '../../utils/helpers';
 import { ACLs } from '../../utils/consts';
@@ -152,21 +153,26 @@ export class S3File extends S3Directory {
         };
     }
 
-    async taggingFile(filePath: string, tagVersion: string = '1.0.0'): Promise<boolean> {
+    async taggingFile(filePath: string, tag: Tag | Tag[]): Promise<boolean> {
+        let normalizedKey: string = '';
+        const tags = ([] as Tag[]).concat(tag);
+
         try {
-            const normalizedKey = getNormalizedPath(filePath);
+            normalizedKey = getNormalizedPath(filePath);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+            if (S3File.leadingSlash) normalizedKey = `/${normalizedKey}`;
 
             const command = new PutObjectTaggingCommand({
                 Bucket: this.bucket,
                 Key: normalizedKey,
-                Tagging: { TagSet: [{ Key: 'version', Value: tagVersion }] },
+                Tagging: { TagSet: tags },
             });
 
             await this.execute<PutObjectTaggingCommandOutput>(command);
 
             return true;
-        } catch {
+        } catch (error: any) {
+            this.logger?.warn(null, 'failed to tagging file', { errMsg: error.message, fileKey: normalizedKey, tags });
             return false;
         }
     }

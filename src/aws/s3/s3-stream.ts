@@ -46,8 +46,9 @@ export class S3Stream extends S3File {
             abortSignal?: AbortSignal;
         } = {}
     ): Promise<Readable | null> {
-        const normalizedKey = getNormalizedPath(filePath);
+        let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+        if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
 
         if (checkFileExists) {
             const isExists = await this.fileExists(normalizedKey);
@@ -88,8 +89,9 @@ export class S3Stream extends S3File {
             lastModified?: Date;
         };
     } | null> {
-        const normalizedKey = getNormalizedPath(filePath);
+        let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+        if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
 
         try {
             const cmd = new GetObjectCommand({
@@ -138,6 +140,7 @@ export class S3Stream extends S3File {
             const filePaths = ([] as string[])
                 .concat(filePath as string[])
                 .map((filePath) => getNormalizedPath(filePath))
+                .map((normalizedKey) => (S3Stream.leadingSlash ? `/${normalizedKey}` : normalizedKey))
                 .filter((v) => v && v !== '/');
 
             if (!filePaths.length) {
@@ -301,8 +304,9 @@ export class S3Stream extends S3File {
 
             req.once('close', onClose);
 
-            const normalizedKey = getNormalizedPath(filePath);
+            let normalizedKey = getNormalizedPath(filePath);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+            if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
 
             try {
                 const isExists = await this.fileExists(normalizedKey);
@@ -390,8 +394,9 @@ export class S3Stream extends S3File {
         streamTimeoutMS?: number | undefined;
     }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const normalizedKey = getNormalizedPath(fileKey);
+            let normalizedKey = getNormalizedPath(fileKey);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+            if (S3Stream.leadingSlash) normalizedKey = `/${normalizedKey}`;
 
             const isExists = await this.fileExists(normalizedKey);
             const fileSize = await this.sizeOf(normalizedKey);
@@ -556,7 +561,9 @@ export class S3Stream extends S3File {
     ): Multer {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = '';
+
+        if (S3Stream.leadingSlash && !normalizedPath.startsWith('/')) normalizedPath = `/${normalizedPath}`;
 
         const fileSize = getFileSize(maxFileSize, this.maxUploadFileSizeRestriction);
         const fileTypes = ([] as FILE_TYPE[]).concat(fileType);
@@ -608,7 +615,6 @@ export class S3Stream extends S3File {
     uploadSingleFile(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
 
         this.logger?.debug(null, '####### uploadSingleFile', { directoryPath, normalizedPath, fieldName });
 
@@ -644,7 +650,6 @@ export class S3Stream extends S3File {
     uploadMultipleFiles(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
 
         const upload = this.getUploadFileMW(normalizedPath, options);
 
@@ -728,7 +733,6 @@ export class S3Stream extends S3File {
     uploadAnyFiles(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
 
         const upload = this.getUploadFileMW(normalizedPath, options);
 
@@ -768,6 +772,7 @@ export class S3Stream extends S3File {
             let fileKey =
                 _fileKey ||
                 (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
+
             if (!fileKey) {
                 this.logger?.warn(req.id, 'image file view required file query field', {
                     fileKey: req.query?.[queryField],
@@ -779,6 +784,8 @@ export class S3Stream extends S3File {
             }
 
             try {
+                if (S3Stream.leadingSlash && !fileKey.startsWith('/')) fileKey = `/${fileKey}`;
+
                 const imageBuffer = await this.fileContent(fileKey, 'buffer');
                 const ext = path.extname(fileKey).slice(1).toLowerCase();
 
@@ -811,15 +818,17 @@ export class S3Stream extends S3File {
         cachingAge = 31536000,
     }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const fileKey =
+            let fileKey =
                 _fileKey ||
                 (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
+
             if (!fileKey) {
                 next('pdf file key is required');
                 return;
             }
 
             try {
+                if (S3Stream.leadingSlash && !fileKey.startsWith('/')) fileKey = `/${fileKey}`;
                 const fileBuffer = await this.fileContent(fileKey, 'buffer');
                 const ext = path.extname(fileKey).slice(1).toLowerCase();
 
