@@ -62,8 +62,8 @@ import {
     type GetBucketVersioningCommandOutput,
     type GetBucketEncryptionCommandOutput,
 } from '@aws-sdk/client-s3';
-import { ACLs } from '../utils/consts';
-import { s3Limiter } from '../utils/concurrency';
+import { ACLs } from '../../utils/consts';
+import { s3Limiter } from '../../utils/concurrency';
 import multer, { type Multer } from 'multer';
 import multerS3 from 'multer-s3';
 import bytes from 'bytes';
@@ -80,29 +80,12 @@ import type {
     TreeDirectoryItem,
     TreeFileItem,
     UploadedS3File,
-} from '../interfaces';
-export type { UploadedS3File } from '../interfaces';
-import { AWSConfigSharingUtil } from './configuration';
+} from '../../interfaces';
+export type { UploadedS3File } from '../../interfaces';
+import { AWSConfigSharingUtil } from '../configuration';
+import { getNormalizedPath, parseRangeHeader } from '../../utils/helpers';
 
 const pump = promisify(pipeline);
-
-const parseRangeHeader = (range: string | undefined, contentLength: number, chunkSize: number) => {
-    if (!range || !range.startsWith('bytes=')) return null;
-    const rangeParts = range.replace('bytes=', '').split('-');
-    const start = parseInt(rangeParts[0], 10);
-    let end = parseInt(rangeParts[1], 10);
-    end = end || start + chunkSize - 1;
-
-    if (isNaN(start) || start < 0 || start >= contentLength) return null;
-    if (isNaN(end) || end < start || end >= contentLength) {
-        return [start, contentLength - 1];
-    }
-
-    return [start, Math.min(end, end)];
-};
-
-const getNormalizedPath = (directoryPath?: string) =>
-    decodeURIComponent(directoryPath?.replace(/^\/+/, '').replace(/\/+$/, '') || '');
 
 export class S3BucketUtil {
     public readonly s3Client: S3Client;
@@ -172,7 +155,7 @@ export class S3BucketUtil {
             : `https://s3.${this.region}.amazonaws.com/${this.bucket}/`;
     }
 
-    private async execute<T = ServiceOutputTypes>(command: any, options?: any): Promise<T> {
+    protected async execute<T = ServiceOutputTypes>(command: any, options?: any): Promise<T> {
         // @ts-ignore
         return this.s3Client.send(command, options);
     }
@@ -1895,11 +1878,14 @@ export class S3BucketUtil {
     }
 
     getImageFileViewCtrl = ({
+        fileKey: _fileKey,
         queryField = 'file',
         cachingAge = 31536000,
-    }: { queryField?: string; cachingAge?: number } = {}) => {
+    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            let fileKey = req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined;
+            let fileKey =
+                _fileKey ||
+                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
             if (!fileKey) {
                 this.logger?.warn(req.id, 'image file view required file query field', {
                     fileKey: req.query?.[queryField],
@@ -1938,11 +1924,14 @@ export class S3BucketUtil {
     };
 
     getPdfFileViewCtrl = ({
+        fileKey: _fileKey,
         queryField = 'file',
         cachingAge = 31536000,
-    }: { queryField?: string; cachingAge?: number } = {}) => {
+    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const fileKey = req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined;
+            const fileKey =
+                _fileKey ||
+                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
             if (!fileKey) {
                 next('pdf file key is required');
                 return;
