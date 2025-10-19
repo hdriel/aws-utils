@@ -34,9 +34,7 @@ export class S3File extends S3Directory {
 
     async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
         const normalizedKey = getNormalizedPath(filePath);
-        if (!normalizedKey || normalizedKey === '/') {
-            throw new Error('No file key provided');
-        }
+        if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
 
@@ -49,7 +47,8 @@ export class S3File extends S3Directory {
     ): Promise<(ContentFile & { Location: string })[]> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        // Must filter by '/' to find files on root // THERE IS A DIFF BETWEEN LOCALSTACK TO AWS!! IN LOCALSTACK NEED THIS LINE, IN AWS it must by without this!
+        else normalizedPath = this.localstack ? '' : '/';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -79,21 +78,19 @@ export class S3File extends S3Directory {
         return files;
     }
 
+    // todo: checked!
     async fileListInfoPaginated(
         directoryPath?: string,
         {
             fileNamePrefix,
             pageNumber = 0, // 0-based: page 0 = items 0-99, page 1 = items 100-199, page 2 = items 200-299
             pageSize = 100,
-            localstack,
-        }: { fileNamePrefix?: string; pageSize?: number; pageNumber?: number; localstack?: boolean } = {}
+        }: { fileNamePrefix?: string; pageSize?: number; pageNumber?: number } = {}
     ): Promise<{ files: (ContentFile & { Location: string })[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else {
-            // Must filter by '/' to find files on root // THERE IS A DIFF BETWEEN LOCALSTACK TO AWS!! IN LOCALSTACK NEED THIS LINE, IN AWS it must by without this!
-            if (localstack) normalizedPath = '/';
-        }
+        // Must filter by '/' to find files on root // THERE IS A DIFF BETWEEN LOCALSTACK TO AWS!! IN LOCALSTACK NEED THIS LINE, IN AWS it must by without this!
+        else normalizedPath = this.localstack ? '' : '/';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
@@ -153,6 +150,7 @@ export class S3File extends S3Directory {
         };
     }
 
+    // todo: checked!
     async taggingFile(filePath: string, tag: Tag | Tag[]): Promise<boolean> {
         let normalizedKey: string = '';
         const tags = ([] as Tag[]).concat(tag);
@@ -160,7 +158,6 @@ export class S3File extends S3Directory {
         try {
             normalizedKey = getNormalizedPath(filePath);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-            if (this.localstack) normalizedKey = `/${normalizedKey}`;
 
             const command = new PutObjectTaggingCommand({
                 Bucket: this.bucket,
@@ -177,6 +174,7 @@ export class S3File extends S3Directory {
         }
     }
 
+    // todo: checked!
     async fileVersion(filePath: string): Promise<string> {
         const normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
@@ -189,6 +187,7 @@ export class S3File extends S3Directory {
         return tag?.Value ?? '';
     }
 
+    // todo: checked!
     async fileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
         let normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
@@ -231,6 +230,7 @@ export class S3File extends S3Directory {
         }
     }
 
+    // todo: checked!
     async fileExists(filePath: string): Promise<boolean> {
         try {
             const normalizedKey = getNormalizedPath(filePath);
@@ -277,6 +277,7 @@ export class S3File extends S3Directory {
         return buffer;
     }
 
+    // todo: checked!
     async uploadFile(
         filePath: string,
         fileData: Buffer | Readable | string | Uint8Array,
@@ -307,6 +308,7 @@ export class S3File extends S3Directory {
         };
     }
 
+    // todo: checked!
     async deleteFile(filePath: string): Promise<DeleteObjectCommandOutput> {
         const normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
