@@ -212,7 +212,7 @@ export class S3Directory extends S3Bucket {
     ): Promise<{ directories: string[]; files: ContentFile[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = this.localstack ? '' : '/';
+        else normalizedPath = '';
 
         let continuationToken: string | undefined = undefined;
         let currentPage = 0;
@@ -223,49 +223,15 @@ export class S3Directory extends S3Bucket {
         while (currentPage <= pageNumber) {
             let result: ListObjectsV2CommandOutput;
 
-            if (normalizedPath === '/') {
-                const [fileResponse, { Contents, CommonPrefixes }] = await Promise.all([
-                    this.execute<ListObjectsV2CommandOutput>(
-                        new ListObjectsV2Command({
-                            Bucket: this.bucket,
-                            Prefix: '/',
-                            Delimiter: '/',
-                            MaxKeys: pageSize,
-                            ContinuationToken: continuationToken,
-                        })
-                    ),
-                    // todo:    it's going to make some bugs here,
-                    //          because we got the fileResponse.NextContinuationToken
-                    //          and not consider to the NextContinuationToken of the seconds response,
-                    //          that mean we pull the same directory again and again,
-                    //          therefore I pull all directory once, instead of logic to iterate theme..
-                    //          hopefully aws fill fixing that bug to make separate calls on the root level
-                    await this.execute<ListObjectsV2CommandOutput>(
-                        new ListObjectsV2Command({
-                            Bucket: this.bucket,
-                            Prefix: '',
-                            Delimiter: '/',
-                            MaxKeys: 1000,
-                            ContinuationToken: continuationToken,
-                        })
-                    ),
-                ]);
-
-                result = fileResponse;
-                result.Contents ||= [];
-                if (Contents?.length) result.Contents?.push(...Contents);
-                result.CommonPrefixes = CommonPrefixes;
-            } else {
-                result = await this.execute<ListObjectsV2CommandOutput>(
-                    new ListObjectsV2Command({
-                        Bucket: this.bucket,
-                        Prefix: normalizedPath,
-                        Delimiter: '/',
-                        MaxKeys: pageSize,
-                        ContinuationToken: continuationToken,
-                    })
-                );
-            }
+            result = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: normalizedPath,
+                    Delimiter: '/',
+                    MaxKeys: pageSize,
+                    ContinuationToken: continuationToken,
+                })
+            );
 
             // If we're at the target page, extract the data
             if (currentPage === pageNumber) {

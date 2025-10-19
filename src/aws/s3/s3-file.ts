@@ -89,8 +89,7 @@ export class S3File extends S3Directory {
     ): Promise<{ files: (ContentFile & { Location: string })[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        // Must filter by '/' to find files on root // THERE IS A DIFF BETWEEN LOCALSTACK TO AWS!! IN LOCALSTACK NEED THIS LINE, IN AWS it must by without this!
-        else normalizedPath = this.localstack ? '' : '/';
+        else normalizedPath = '';
 
         const prefix = normalizedPath + (fileNamePrefix || '');
 
