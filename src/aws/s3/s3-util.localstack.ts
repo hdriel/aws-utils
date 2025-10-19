@@ -1,7 +1,7 @@
-// import { ListObjectsV2Command, type ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
-// import { getNormalizedPath } from '../../utils/helpers';
-// import type { ContentFile } from '../../interfaces';
+import { ListObjectsV2Command, type ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
 import { S3Util, type S3UtilProps } from './s3-util';
+import type { ContentFile } from '../../interfaces';
+import { getNormalizedPath } from '../../utils/helpers.ts';
 
 type S3LocalstackUtilProps = S3UtilProps;
 
@@ -11,43 +11,21 @@ export class S3LocalstackUtil extends S3Util {
         super({ ...props, localstack: true });
     }
 
-    /*
+    // todo: checked!
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = this.localstack ? '' : '/';
 
         let result: ListObjectsV2CommandOutput;
 
-        if (normalizedPath === '') {
-            const [fileResponse, { CommonPrefixes }] = await Promise.all([
-                this.execute<ListObjectsV2CommandOutput>(
-                    new ListObjectsV2Command({
-                        Bucket: this.bucket,
-                        Prefix: '/',
-                        Delimiter: '/',
-                    })
-                ),
-                await this.execute<ListObjectsV2CommandOutput>(
-                    new ListObjectsV2Command({
-                        Bucket: this.bucket,
-                        Prefix: '',
-                        Delimiter: '/',
-                    })
-                ),
-            ]);
-
-            result = fileResponse;
-            result.CommonPrefixes = CommonPrefixes;
-        } else {
-            result = await this.execute<ListObjectsV2CommandOutput>(
-                new ListObjectsV2Command({
-                    Bucket: this.bucket,
-                    Prefix: normalizedPath,
-                    Delimiter: '/',
-                })
-            );
-        }
+        result = await this.execute<ListObjectsV2CommandOutput>(
+            new ListObjectsV2Command({
+                Bucket: this.bucket,
+                Prefix: normalizedPath,
+                Delimiter: '/',
+            })
+        );
 
         this.logger?.debug(null, '#### directoryList', {
             normalizedPath,
@@ -82,6 +60,7 @@ export class S3LocalstackUtil extends S3Util {
         return { directories, files };
     }
 
+    // todo: checked!
     async directoryListPaginated(
         directoryPath?: string,
         {
@@ -94,7 +73,7 @@ export class S3LocalstackUtil extends S3Util {
     ): Promise<{ directories: string[]; files: ContentFile[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        else normalizedPath = this.localstack ? '' : '/';
 
         let continuationToken: string | undefined = undefined;
         let currentPage = 0;
@@ -105,49 +84,16 @@ export class S3LocalstackUtil extends S3Util {
         while (currentPage <= pageNumber) {
             let result: ListObjectsV2CommandOutput;
 
-            if (normalizedPath === '/') {
-                const [fileResponse, { Contents, CommonPrefixes }] = await Promise.all([
-                    this.execute<ListObjectsV2CommandOutput>(
-                        new ListObjectsV2Command({
-                            Bucket: this.bucket,
-                            Prefix: '/',
-                            Delimiter: '/',
-                            MaxKeys: pageSize,
-                            ContinuationToken: continuationToken,
-                        })
-                    ),
-                    // todo:    it's going to make some bugs here,
-                    //          because we got the fileResponse.NextContinuationToken
-                    //          and not consider to the NextContinuationToken of the seconds response,
-                    //          that mean we pull the same directory again and again,
-                    //          therefore I pull all directory once, instead of logic to iterate theme..
-                    //          hopefully aws fill fixing that bug to make separate calls on the root level
-                    await this.execute<ListObjectsV2CommandOutput>(
-                        new ListObjectsV2Command({
-                            Bucket: this.bucket,
-                            Prefix: '',
-                            Delimiter: '/',
-                            MaxKeys: 1000,
-                            ContinuationToken: continuationToken,
-                        })
-                    ),
-                ]);
-
-                result = fileResponse;
-                result.Contents ||= [];
-                if (Contents?.length) result.Contents?.push(...Contents);
-                result.CommonPrefixes = CommonPrefixes;
-            } else {
-                result = await this.execute<ListObjectsV2CommandOutput>(
-                    new ListObjectsV2Command({
-                        Bucket: this.bucket,
-                        Prefix: normalizedPath,
-                        Delimiter: '/',
-                        MaxKeys: pageSize,
-                        ContinuationToken: continuationToken,
-                    })
-                );
-            }
+            result = await this.execute<ListObjectsV2CommandOutput>(
+                new ListObjectsV2Command({
+                    Bucket: this.bucket,
+                    Prefix: normalizedPath,
+                    Delimiter: '/',
+                    MaxKeys: pageSize,
+                    ContinuationToken: continuationToken,
+                })
+            );
+            // }
 
             // If we're at the target page, extract the data
             if (currentPage === pageNumber) {
@@ -189,5 +135,5 @@ export class S3LocalstackUtil extends S3Util {
             files: allFiles,
             totalFetched: allFiles.length + allDirectories.length,
         };
-    }*/
+    }
 }
