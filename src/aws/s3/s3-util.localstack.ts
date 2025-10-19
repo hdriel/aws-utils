@@ -1,6 +1,6 @@
-import { ListObjectsV2Command, type ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
-import { getNormalizedPath } from '../../utils/helpers';
-import type { ContentFile } from '../../interfaces';
+// import { ListObjectsV2Command, type ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
+// import { getNormalizedPath } from '../../utils/helpers';
+// import type { ContentFile } from '../../interfaces';
 import { S3Util, type S3UtilProps } from './s3-util';
 
 type S3LocalstackUtilProps = S3UtilProps;
@@ -11,6 +11,7 @@ export class S3LocalstackUtil extends S3Util {
         super({ ...props, localstack: true });
     }
 
+    /*
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
@@ -188,5 +189,5 @@ export class S3LocalstackUtil extends S3Util {
             files: allFiles,
             totalFetched: allFiles.length + allDirectories.length,
         };
-    }
+    }*/
 }

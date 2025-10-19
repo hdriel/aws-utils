@@ -40,8 +40,7 @@ export class S3Directory extends S3Bucket {
 
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
         let normalizedPath = getNormalizedPath(directoryPath);
-        if (!normalizedPath) throw new Error('No directory path provided');
-        if (normalizedPath === '/') normalizedPath = '';
+        if (!normalizedPath || normalizedPath === '/') throw new Error('No directory path provided');
 
         const command = new PutObjectCommand({ Bucket: this.bucket, Key: `${normalizedPath}/` });
         const result = await this.execute<PutObjectCommandOutput>(command);
@@ -129,7 +128,7 @@ export class S3Directory extends S3Bucket {
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '';
+        else normalizedPath = this.localstack ? '' : '/';
 
         let result: ListObjectsV2CommandOutput;
 
@@ -208,7 +207,8 @@ export class S3Directory extends S3Bucket {
     ): Promise<{ directories: string[]; files: ContentFile[]; totalFetched: number }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
+        // else normalizedPath = '/';
+        else normalizedPath = this.localstack ? '' : '/';
 
         let continuationToken: string | undefined = undefined;
         let currentPage = 0;
