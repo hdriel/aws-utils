@@ -15,7 +15,7 @@ export class S3LocalstackUtil extends S3Util {
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = this.localstack ? '' : '/';
+        else normalizedPath = '';
 
         let result: ListObjectsV2CommandOutput;
 
