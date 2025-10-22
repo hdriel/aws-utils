@@ -1,8 +1,8 @@
 import './config';
-import { ACLs, S3BucketUtil } from '@hdriel/aws-utils';
+import { ACLs, S3LocalstackUtil } from '@hdriel/aws-utils';
 
 (async () => {
-    const s3BucketUtil = new S3BucketUtil({ bucket: 'demo-bucket' });
+    const s3BucketUtil = new S3LocalstackUtil({ bucket: 'demo-bucket' });
     const tempDirectory = 'new-directory/nested-directory';
     const filePath = 'testing/files/test.txt';
     const fileData =
@@ -99,7 +99,7 @@ import { ACLs, S3BucketUtil } from '@hdriel/aws-utils';
         console.log('#'.repeat(25));
         console.log('#### TAG BUCKET file', filePath, '\n');
 
-        const fileTaggingData = await s3BucketUtil.taggingFile(filePath, 'v1.0.1');
+        const fileTaggingData = await s3BucketUtil.taggingFile(filePath, { Key: 'version', Value: 'v1.0.1' });
         console.log('File tagging Data', fileTaggingData);
 
         console.log('\n' + '='.repeat(25));
