@@ -276,59 +276,6 @@ export class S3Directory extends S3Bucket {
     }
 
     /**
-     * Get all files recursively (example for search/indexing)
-     * @param directoryPath
-     */
-    async directoryListRecursive(directoryPath?: string): Promise<{
-        directories: string[];
-        files: Array<ContentFile & { Name: string }>;
-    }> {
-        let normalizedPath = getNormalizedPath(directoryPath);
-        if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
-        else normalizedPath = '/';
-
-        const allDirectories: string[] = [];
-        const allFiles: Array<ContentFile & { Name: string }> = [];
-        let ContinuationToken: string | undefined = undefined;
-
-        do {
-            const result: ListObjectsV2CommandOutput = await this.execute<ListObjectsV2CommandOutput>(
-                new ListObjectsV2Command({
-                    Bucket: this.bucket,
-                    Prefix: normalizedPath,
-                    ContinuationToken,
-                })
-            );
-
-            if (result.Contents) {
-                for (const content of result.Contents) {
-                    const fullPath = content.Key!;
-                    const relativePath = fullPath.replace(normalizedPath, '');
-                    const filename = fullPath.split('/').pop();
-
-                    // If it ends with /, it's a directory marker
-                    if (fullPath.endsWith('/')) {
-                        allDirectories.push(relativePath.slice(0, -1)); // Remove trailing /
-                    } else {
-                        // It's a file
-                        allFiles.push({
-                            ...content,
-                            Name: filename,
-                            Path: fullPath,
-                            Location: content.Key ? `${this.link}${content.Key?.replace(/^\//, '')}` : '',
-                            LastModified: content.LastModified ? new Date(content.LastModified) : null,
-                        } as ContentFile & { Name: string; Path: string });
-                    }
-                }
-            }
-
-            ContinuationToken = result.NextContinuationToken;
-        } while (ContinuationToken);
-
-        return { directories: allDirectories, files: allFiles };
-    }
-
-    /**
      * Get tree files recursively (example for build file explorer UI)
      * @param directoryPath - the directory start from
      * @example
