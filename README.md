@@ -2,6 +2,7 @@
 
 A powerful, type-safe wrapper around AWS S3 SDK v3 that simplifies S3 operations with advanced features like streaming, file uploads, directory management, and LocalStack support.
 
+
 ## Features
 
 ✨ **Simplified API** - Clean, intuitive methods for common S3 operations  
@@ -14,6 +15,11 @@ A powerful, type-safe wrapper around AWS S3 SDK v3 that simplifies S3 operations
 🧪 **LocalStack Support** - First-class support for local S3 testing  
 ⚡ **Connection Pooling** - Optimized HTTP/HTTPS agents for better performance  
 📊 **Pagination** - Built-in pagination for large directory listings
+
+# FULL DEMO PROJECT EXAMPLE:
+please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
+![Main Screen - Preview](readme-assets/demo-bucket-image-preview.webp)
+
 
 ## Installation
 
@@ -98,8 +104,9 @@ interface S3UtilProps {
 ```
 ----
 
-# FULL DEMO PROJECT EXAMPLE: 
-please see this project code before using: [AWS-UTILS-DEMO github linke](https://github.com/hdriel/aws-utils-demo)
+# FULL DEMO PROJECT EXAMPLE:
+please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
+![Main Screen - Preview](readme-assets/login-screen.webp)
 
 
 ---
