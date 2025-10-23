@@ -372,7 +372,15 @@ export class S3Stream extends S3File {
     };
 
     // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    async getStreamFileCtrl({ filePath, filename }: { filePath: string; filename?: string }) {
+    async getStreamFileCtrl({
+        filePath,
+        filename,
+        forDownloading = false,
+    }: {
+        filePath: string;
+        filename?: string;
+        forDownloading?: boolean;
+    }) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const abort = new AbortController();
             let stream: Readable | null = null;
@@ -410,7 +418,9 @@ export class S3Stream extends S3File {
                 const fileName = filename || normalizedKey.split('/').pop() || 'download';
 
                 res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
-                res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+                if (forDownloading) {
+                    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+                }
                 if (fileInfo.ContentLength) {
                     res.setHeader('Content-Length', String(fileInfo.ContentLength));
                 }
