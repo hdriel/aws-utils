@@ -19,8 +19,9 @@ import type {
     S3UploadOptions,
     UploadedS3File,
 } from '../../interfaces';
-import { getFileSize, getNormalizedPath, parseRangeHeader } from '../../utils/helpers';
+import { getFileSize, getNormalizedPath, getTotalSeconds, parseRangeHeader } from '../../utils/helpers';
 import { S3File, type S3FileProps } from './s3-file';
+import type { StringValue } from 'ms';
 
 const pump = promisify(pipeline);
 
@@ -35,7 +36,7 @@ export class S3Stream extends S3File {
     }
 
     protected async streamObjectFile(
-        filePath: string,
+        fileKey: string,
         {
             Range,
             checkFileExists = true,
@@ -46,7 +47,7 @@ export class S3Stream extends S3File {
             abortSignal?: AbortSignal;
         } = {}
     ): Promise<Readable | null> {
-        let normalizedKey = getNormalizedPath(filePath);
+        let normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
         // if (this.localstack && !normalizedKey.includes('/')) normalizedKey = `/${normalizedKey}`;
 
@@ -71,15 +72,16 @@ export class S3Stream extends S3File {
     }
 
     // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    protected async streamVideoFile({
-        filePath,
-        Range,
-        abortSignal,
-    }: {
-        filePath: string;
-        Range?: string;
-        abortSignal?: AbortSignal;
-    }): Promise<{
+    protected async streamVideoFile(
+        fileKey: string,
+        {
+            Range,
+            abortSignal,
+        }: {
+            Range?: string;
+            abortSignal?: AbortSignal;
+        } = {}
+    ): Promise<{
         body: Readable;
         meta: {
             contentType?: string;
@@ -90,7 +92,7 @@ export class S3Stream extends S3File {
             lastModified?: Date;
         };
     } | null> {
-        let normalizedKey = getNormalizedPath(filePath);
+        let normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         try {
@@ -119,7 +121,7 @@ export class S3Stream extends S3File {
         } catch (error) {
             this.logger?.warn(this.reqId, 'getS3VideoStream error', {
                 Bucket: this.bucket,
-                filePath: normalizedKey,
+                fileKey: normalizedKey,
                 Range,
                 error,
             });
@@ -190,8 +192,7 @@ export class S3Stream extends S3File {
             req.once('close', onClose);
 
             try {
-                const result = await this.streamVideoFile({
-                    filePath: normalizedKey,
+                const result = await this.streamVideoFile(normalizedKey, {
                     Range,
                     abortSignal: abort.signal,
                 });
@@ -277,20 +278,23 @@ export class S3Stream extends S3File {
     getImageFileViewCtrl = ({
         fileKey: _fileKey,
         queryField = 'file',
-        cachingAge = 31536000,
-    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
+        paramField = 'file',
+        cachingAgeSeconds = '1y',
+    }: {
+        fileKey?: string;
+        queryField?: string;
+        paramField?: string;
+        cachingAgeSeconds?: null | number | StringValue;
+    } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             let fileKey =
                 _fileKey ||
+                (req.params?.[paramField] ? decodeURIComponent(req.params?.[paramField] as string) : undefined) ||
                 (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
 
             if (!fileKey || fileKey === '/') {
-                this.logger?.warn(req.id, 'image file view required file query field', {
-                    fileKey: req.query?.[queryField],
-                    queryField,
-                });
-
-                next('image file key is required');
+                this.logger?.warn(req.id, 'image fileKey is required');
+                next('image fileKey is required');
                 return;
             }
 
@@ -310,14 +314,20 @@ export class S3Stream extends S3File {
 
                 const contentType = mimeTypeMap[ext] || 'application/octet-stream';
                 res.setHeader('Content-Type', contentType);
-                if (cachingAge) res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
                 res.setHeader('Content-Length', imageBuffer.length);
+
+                const cachingAge =
+                    !cachingAgeSeconds || typeof cachingAgeSeconds === 'number'
+                        ? cachingAgeSeconds
+                        : getTotalSeconds(cachingAgeSeconds as StringValue);
+
+                if (cachingAge) res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
 
                 res.status(200).send(imageBuffer);
             } catch (error: any) {
-                this.logger?.warn(req.id, 'image view fileKey not found', {
+                this.logger?.warn(req.id, 'image fileKey not found', {
                     fileKey,
-                    localstack: this.localstack,
+                    ...(this.localstack && { localstack: this.localstack }),
                 });
                 next(`Failed to retrieve image file: ${error.message}`);
             }
@@ -328,21 +338,28 @@ export class S3Stream extends S3File {
     getPdfFileViewCtrl = ({
         fileKey: _fileKey,
         queryField = 'file',
-        cachingAge = 31536000,
-    }: { fileKey?: string; queryField?: string; cachingAge?: number } = {}) => {
+        paramField = 'file',
+        cachingAgeSeconds = '1y',
+    }: {
+        fileKey?: string;
+        queryField?: string;
+        paramField?: string;
+        cachingAgeSeconds?: null | number | StringValue;
+    } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             let fileKey =
                 _fileKey ||
+                (req.params?.[paramField] ? decodeURIComponent(req.params?.[paramField] as string) : undefined) ||
                 (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
 
             if (!fileKey) {
-                next('pdf file key is required');
+                this.logger?.warn(req.id, 'pdf fileKey is required');
+                next('pdf fileKey is required');
                 return;
             }
 
             try {
                 // if (this.localstack && !fileKey.includes('/')) fileKey = `/${fileKey}`;
-
                 const fileBuffer = await this.fileContent(fileKey, 'buffer');
                 const ext = path.extname(fileKey).slice(1).toLowerCase();
 
@@ -361,26 +378,37 @@ export class S3Stream extends S3File {
 
                 res.setHeader('Content-Type', contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${path.basename(fileKey)}"`);
-                res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
                 res.setHeader('Content-Length', fileBuffer.length);
+
+                const cachingAge =
+                    !cachingAgeSeconds || typeof cachingAgeSeconds === 'number'
+                        ? cachingAgeSeconds
+                        : getTotalSeconds(cachingAgeSeconds as StringValue);
+
+                res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
 
                 res.status(200).send(fileBuffer);
             } catch (error: any) {
+                this.logger?.warn(req.id, 'pdf fileKey not found', {
+                    fileKey,
+                    ...(this.localstack && { localstack: this.localstack }),
+                });
                 next(`Failed to retrieve pdf file: ${error.message}`);
             }
         };
     };
 
     // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    async getStreamFileCtrl({
-        filePath,
-        filename,
-        forDownloading = false,
-    }: {
-        filePath: string;
-        filename?: string;
-        forDownloading?: boolean;
-    }) {
+    async getStreamFileCtrl(
+        fileKey: string,
+        {
+            filename,
+            forDownloading = false,
+        }: {
+            filename?: string;
+            forDownloading?: boolean;
+        } = {}
+    ) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const abort = new AbortController();
             let stream: Readable | null = null;
@@ -392,7 +420,7 @@ export class S3Stream extends S3File {
 
             req.once('close', onClose);
 
-            let normalizedKey = getNormalizedPath(filePath);
+            let normalizedKey = getNormalizedPath(fileKey);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             try {
@@ -426,7 +454,7 @@ export class S3Stream extends S3File {
                 }
 
                 stream.on('error', (err) => {
-                    this.logger?.warn(this.reqId, 'Stream error', { filePath: normalizedKey, error: err });
+                    this.logger?.warn(this.reqId, 'Stream error', { fileKey: normalizedKey, error: err });
                     abort.abort();
                     stream?.destroy?.();
                 });
@@ -454,7 +482,7 @@ export class S3Stream extends S3File {
                     return;
                 }
 
-                this.logger?.error(this.reqId, 'Failed to stream file', { filePath: normalizedKey, error });
+                this.logger?.error(this.reqId, 'Failed to stream file', { fileKey: normalizedKey, error });
 
                 if (!res.headersSent) {
                     next(error);
@@ -470,46 +498,45 @@ export class S3Stream extends S3File {
     }
 
     // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    async getStreamZipFileCtr({
-        filePath,
-        filename: _filename,
-        compressionLevel = 5,
-    }: {
-        filePath: string | string[];
-        filename?: string;
-        compressionLevel?: number; // Compression level (0-9, lower = faster)
-    }) {
+    async getStreamZipFileCtr(
+        fileKey: string | string[],
+        {
+            filename: _filename,
+            compressionLevel = 5,
+        }: {
+            filename?: string;
+            compressionLevel?: number; // Compression level (0-9, lower = faster)
+        } = {}
+    ) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            const filePaths = ([] as string[])
-                .concat(filePath as string[])
-                .map((filePath) => getNormalizedPath(filePath))
-                .filter((v) => v && v !== '/');
-
-            if (!filePaths.length) {
-                throw new Error('No file keys provided');
-            }
-
-            let filename = _filename || new Date().toISOString();
-            filename = filename.endsWith('.zip') ? filename : `${filename}.zip`;
-
             const abort = new AbortController();
-            const onClose = () => {
-                abort.abort();
-            };
-
-            req.once('close', onClose);
+            const onClose = () => abort.abort();
 
             try {
-                this.logger?.info(this.reqId, 'Starting parallel file download...', { fileCount: filePaths.length });
+                const fileKeys = ([] as string[])
+                    .concat(fileKey as string[])
+                    .map((fileKey) => getNormalizedPath(fileKey))
+                    .filter((v) => v && v !== '/');
 
-                const downloadPromises = filePaths.map(async (filePath) => {
+                if (!fileKeys.length) {
+                    throw new Error('No file keys provided');
+                }
+
+                let filename = _filename || new Date().toISOString();
+                filename = filename.endsWith('.zip') ? filename : `${filename}.zip`;
+
+                req.once('close', onClose);
+
+                this.logger?.info(this.reqId, 'Starting parallel file download...', { fileCount: fileKeys.length });
+
+                const downloadPromises = fileKeys.map(async (fileKey) => {
                     try {
                         if (abort.signal.aborted) return null;
 
-                        const stream = await this.streamObjectFile(filePath, { abortSignal: abort.signal });
+                        const stream = await this.streamObjectFile(fileKey, { abortSignal: abort.signal });
 
                         if (!stream) {
-                            this.logger?.warn(this.reqId, 'File not found', { filePath });
+                            this.logger?.warn(this.reqId, 'File not found', { fileKey });
                             return null;
                         }
 
@@ -523,16 +550,16 @@ export class S3Stream extends S3File {
                         }
 
                         const buffer = Buffer.concat(chunks);
-                        const fileName = filePath.split('/').pop() || filePath;
+                        const fileName = fileKey.split('/').pop() || fileKey;
 
                         this.logger?.debug(this.reqId, 'File downloaded', {
-                            filePath,
+                            fileKey,
                             sizeMB: (buffer.length / (1024 * 1024)).toFixed(2),
                         });
 
-                        return { buffer, name: fileName, path: filePath };
+                        return { buffer, name: fileName, path: fileKey };
                     } catch (error) {
-                        this.logger?.warn(this.reqId, 'Failed to download file', { filePath, error });
+                        this.logger?.warn(this.reqId, 'Failed to download file', { fileKey, error });
                         return null;
                     }
                 });

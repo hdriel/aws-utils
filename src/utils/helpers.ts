@@ -1,5 +1,6 @@
 import type { ByteUnitStringValue } from '../interfaces';
 import bytes from 'bytes';
+import ms, { type StringValue } from 'ms';
 
 export const parseRangeHeader = (range: string | undefined, contentLength: number, chunkSize: number) => {
     if (!range || !range.startsWith('bytes=')) return null;
@@ -28,4 +29,9 @@ export const getFileSize = (
     const fileSize = typeof fileSizeUnitValue === 'number' ? fileSizeUnitValue : bytes(fileSizeUnitValue);
 
     return fileSize ?? undefined;
+};
+
+export const getTotalSeconds = (msValue: StringValue) => {
+    const value = ms(msValue);
+    return value / 1000;
 };
