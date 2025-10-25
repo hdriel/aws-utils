@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 import { Readable } from 'node:stream';
 import ms, { type StringValue } from 'ms';
+import { basename } from 'pathe';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -32,13 +33,24 @@ export class S3File extends S3Directory {
         super(props);
     }
 
-    async fileInfo(filePath: string): Promise<HeadObjectCommandOutput> {
+    async fileInfo(
+        filePath: string
+    ): Promise<HeadObjectCommandOutput & { Name: string; Location: string; Key: string }> {
         const normalizedKey = getNormalizedPath(filePath);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
 
-        return await this.execute<HeadObjectCommandOutput>(command);
+        const result = await this.execute<HeadObjectCommandOutput>(command);
+
+        if (!result) return result;
+
+        return {
+            ...result,
+            Name: basename(normalizedKey),
+            Key: normalizedKey,
+            Location: `${this.link}${normalizedKey?.replace(/^\//, '')}`,
+        };
     }
 
     async fileListInfo(

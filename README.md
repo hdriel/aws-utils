@@ -114,27 +114,19 @@ please see this project code before using: [aws-utils-demo github link!](https:/
 
 ## Core Features
 
-### 🪣 Bucket Operations
+### C.R.U.D Bucket Operations
 
-#### Initialize Bucket
 ```typescript
-// Create private bucket
-await s3.initBucket('private');
+// CREATE
+await s3.initBucket('private'); // Create private bucket (if not exists)
+await s3.initBucket('public-read'); // Create public bucket (if not exists)
+// Could provided includeConstraintLocation option, like:  
+await s3.initBucket('private', { includeConstraintLocation: true} );
 
-// Create public bucket
-await s3.initBucket('public-read');
-
-// With location constraint
-await s3.initBucket('private', { 
-  includeConstraintLocation: true 
-});
-```
-
-#### Bucket Information
-```typescript
+// READ
+const exists = await s3.isBucketExists(); // check for existance bucket
 const info = await s3.bucketInfo();
-console.log(info);
-// {
+// info = {
 //   name: 'my-bucket',
 //   region: 'us-east-1',
 //   exists: true,
@@ -144,44 +136,47 @@ console.log(info);
 //   publicAccessBlock: { ... },
 //   policy: { ... }
 // }
+
+const buckets = await s3.getBucketList(); // get all bucket list from aws s3 storage
+// Could get bucket list with public access info like: 
+/*
+bucket list option: {
+    Name?: string | undefined;
+    CreationDate?: Date | undefined;
+    BucketRegion?: string | undefined;
+    BucketArn?: string | undefined;
+    PublicAccessBlockConfiguration: {    
+        BlockPublicAcls?: boolean | undefined;
+        IgnorePublicAcls?: boolean | undefined;
+        BlockPublicPolicy?: boolean | undefined;
+        RestrictPublicBuckets?: boolean | undefined;
+    }
+}
+*/
+const bucketsWithAccess = await s3.getBucketList({ includePublicAccess: true });
+
+// UPDATE
+s3.changeBucket('another-bucket'); // Switch to different bucket 
+
+// DELETE
+await s3.destroyBucket(); // delete empty bucket
+await s3.destroyBucket(true); // Force delete with all contents and bucket
 ```
 
-#### Check Bucket Exists
-```typescript
-const exists = await s3.isBucketExists();
-```
+### 📁 C.R.U.D Directory Operations
 
-#### Delete Bucket
-```typescript
-// Delete bucket (must be empty)
-await s3.destroyBucket();
-
-// Force delete with all contents
-await s3.destroyBucket(true);
-```
-
-#### List All Buckets
-```typescript
-const buckets = await s3.getBucketList();
-
-// Include public access configuration
-const bucketsWithAccess = await s3.getBucketList({ 
-  includePublicAccess: true 
-});
-```
-
-### 📁 Directory Operations
+* auto decodeURIComponent for all directory input params
+* handle directory issue (no matter if prefix/postfix slashes)
 
 #### Create Directory
 ```typescript
+// CREATE
 await s3.createDirectory('/uploads/images');
-```
 
-#### List Directory Contents
-```typescript
+// READ
+const exists = await s3.directoryExists('/uploads/images'); // check for existance directory
 const { directories, files } = await s3.directoryList('/uploads');
-
-console.log('Subdirectories:', directories);
+console.log('Subdirectories:', directories); // string[] directories like: ['images', 'test']
 console.log('Files:', files);
 // files: [
 //   {
@@ -192,36 +187,24 @@ console.log('Files:', files);
 //     Location: 'https://...'
 //   }
 // ]
-```
 
-#### Paginated Directory Listing
-```typescript
 // Get second page with 50 items per page
-const result = await s3.directoryListPaginated('/uploads', {
-  pageSize: 50,
-  pageNumber: 1
+const { directories, files, totalFetched } = await s3.directoryListPaginated('/uploads', {
+    pageSize: 50,
+    pageNumber: 1 // pageNumber is zero base (0-page one, 1- page two, ...)
 });
 
-console.log(result.directories); // Array of directory names
-console.log(result.files);       // Array of file objects
-console.log(result.totalFetched); // Number of items returned
+// DELETE
+await s3.deleteDirectory('/uploads/temp'); // Delete directory and all contents
+
 ```
 
-#### Delete Directory
-```typescript
-// Delete directory and all contents
-await s3.deleteDirectory('/uploads/temp');
-```
 
-#### Check Directory Exists
-```typescript
-const exists = await s3.directoryExists('/uploads/images');
-```
+### 📄 C.R.U.D File Operations
 
-### 📄 File Operations
-
-#### Upload File
 ```typescript
+// CREATE
+// > Upload File
 import { ACLs } from '@hdriel/aws-utils';
 
 // Upload buffer
@@ -232,79 +215,45 @@ await s3.uploadFile('/public/image.jpg', buffer, ACLs.public_read);
 
 // Upload with version tag
 await s3.uploadFile('/docs/v2.pdf', buffer, ACLs.private, '2.0.0');
-```
 
-#### Check File Exists
-```typescript
-const exists = await s3.fileExists('/documents/file.pdf');
-```
+// >  Generate Presigned URL
+const url = await s3.fileUrl('/private/document.pdf'); // Expires in 15 minutes (default)
+const url = await s3.fileUrl('/private/document.pdf', '1h'); // Custom expiration in string value
+const url = await s3.fileUrl('/private/document.pdf', 3600); // Custom expiration in seconds value
 
-#### Get File Content
-```typescript
-// As buffer
-const buffer = await s3.fileContent('/documents/file.pdf');
-
-// As base64 string
-const base64 = await s3.fileContent('/image.jpg', 'base64');
-
-// As UTF-8 string
-const text = await s3.fileContent('/data.json', 'utf8');
-```
-
-#### File Information
-```typescript
+// READ
+const exists = await s3.fileExists('/documents/file.pdf'); // check for existance file
 const info = await s3.fileInfo('/documents/file.pdf');
-console.log(info.ContentLength);
-console.log(info.ContentType);
-console.log(info.LastModified);
-```
-
-#### List Files
-```typescript
-// List all files in directory
-const files = await s3.fileListInfo('/documents');
-
-// List files with prefix
-const pdfFiles = await s3.fileListInfo('/documents', 'report-');
-
-// Paginated file listing
-const { files, totalFetched } = await s3.fileListInfoPaginated('/documents', {
-  fileNamePrefix: 'invoice-',
-  pageSize: 100,
-  pageNumber: 0
+const files = await s3.fileListInfo('/documents'); // List all files in directory
+const pdfFiles = await s3.fileListInfo('/documents', 'report-'); // List files with prefix
+// Paginated file listing - Recommanded way!
+const { files, totalFetched } = await s3.fileListInfoPaginated('/documents', { 
+    fileNamePrefix: 'invoice-',
+    pageSize: 100,
+    pageNumber: 0
 });
-```
+const version = await s3.fileVersion('/documents/file.pdf'); // Get file version
 
-#### File Size
-```typescript
+
+// > Get File Content
+const buffer = await s3.fileContent('/documents/file.pdf'); // As buffer
+const base64 = await s3.fileContent('/image.jpg', 'base64'); // As base64 string
+const text = await s3.fileContent('/data.json', 'utf8'); // As UTF-8 string
+
+// > Get File Size
 const bytes = await s3.sizeOf('/large-file.zip');
 const kb = await s3.sizeOf('/large-file.zip', 'KB');
 const mb = await s3.sizeOf('/large-file.zip', 'MB');
 const gb = await s3.sizeOf('/large-file.zip', 'GB');
-```
 
-#### Delete File
-```typescript
+// UPDATE 
+// > File Tagging
+await s3.taggingFile('/documents/file.pdf', {Key: 'version', Value: '1.0.0'}); // Tag file with version
+
+
+// DELETE 
 await s3.deleteFile('/documents/old-file.pdf');
-```
 
-#### Generate Presigned URL
-```typescript
-// Expires in 15 minutes (default)
-const url = await s3.fileUrl('/private/document.pdf');
-
-// Custom expiration
-const url = await s3.fileUrl('/private/document.pdf', '1h');
-const url = await s3.fileUrl('/private/document.pdf', 3600); // seconds
-```
-
-#### File Tagging
-```typescript
-// Tag file with version
-await s3.taggingFile('/documents/file.pdf', '1.0.0');
-
-// Get file version
-const version = await s3.fileVersion('/documents/file.pdf');
 ```
 
 ### 🎬 Streaming & Express.js Integration
@@ -494,11 +443,10 @@ import { S3LocalstackUtil } from '@hdriel/aws-utils';
 
 const s3 = new S3LocalstackUtil({
   bucket: 'test-bucket',
-  endpoint: 'http://localhost:4566',
-  region: 'us-east-1',
-  accessKeyId: 'test',
-  secretAccessKey: 'test',
-  s3ForcePathStyle: true
+  // endpoint: 'http://localhost:4566', // get from .env file
+  // region: 'us-east-1', // get from .env file
+  // accessKeyId: 'test', // get from .env file
+  // secretAccessKey: 'test', // get from .env file
 });
 
 // Use same API as S3Util
@@ -547,19 +495,6 @@ services:
 
 ### Dynamic Bucket Switching
 
-```typescript
-const s3 = new S3Util({
-  bucket: 'default-bucket',
-  // ... other config
-});
-
-// Switch to different bucket
-s3.changeBucket('another-bucket');
-
-// Operations now use 'another-bucket'
-await s3.fileExists('/file.txt');
-```
-
 ### Custom Logger Integration
 
 ```typescript
@@ -568,9 +503,9 @@ import { Logger } from 'stack-trace-logger';
 const logger = new Logger('S3Service');
 
 const s3 = new S3Util({
-  bucket: 'my-bucket',
-  logger,
-  reqId: 'request-123'
+    bucket: 'my-bucket',
+    reqId: 'request-123', 
+    logger,
 });
 
 // All operations will log with your logger
@@ -589,152 +524,16 @@ The utility includes optimized HTTP/HTTPS agents:
 // - socketTimeout: 30000ms
 ```
 
-### Batch Operations
-
-```typescript
-// Upload multiple files in parallel
-const files = [
-  { path: '/docs/file1.pdf', data: buffer1 },
-  { path: '/docs/file2.pdf', data: buffer2 },
-  { path: '/docs/file3.pdf', data: buffer3 }
-];
-
-await Promise.all(
-  files.map(file => s3.uploadFile(file.path, file.data))
-);
-
-// Delete multiple files
-const filesToDelete = ['/old/file1.txt', '/old/file2.txt'];
-await Promise.all(
-  filesToDelete.map(path => s3.deleteFile(path))
-);
-```
 
 ## 📋 Complete Express.js Example
+# FULL DEMO PROJECT EXAMPLE:
+please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
+![Main Screen - Preview](readme-assets/demo-bucket-image-preview.webp)
 
-```typescript
-import express from 'express';
-import { S3Util, ACLs } from '@hdriel/aws-utils';
-
-const app = express();
-const s3 = new S3Util({
-  bucket: process.env.S3_BUCKET!,
-  region: process.env.AWS_REGION,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-});
-
-// Initialize bucket on startup
-(async () => {
-  await s3.initBucket();
-  console.log('S3 bucket initialized');
-})();
-
-// Upload endpoint
-app.post('/api/upload',
-  s3.uploadSingleFile('file', '/uploads', {
-    maxFileSize: '10MB',
-    fileType: ['image', 'application'],
-    filename: async (req, file) => {
-      const timestamp = Date.now();
-      const sanitized = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-      return `${timestamp}-${sanitized}`;
-    }
-  }),
-  async (req, res) => {
-    const { key, location, size } = req.s3File!;
-    
-    // Generate temporary URL
-    const url = await s3.fileUrl(key, '1h');
-    
-    res.json({ key, location, size, temporaryUrl: url });
-  }
-);
-
-// Download endpoint
-app.get('/api/download/:key(*)',
-  async (req, res, next) => {
-    const key = decodeURIComponent(req.params.key);
-    const ctrl = await s3.getStreamFileCtrl({ 
-      filePath: key,
-      forDownloading: true
-    });
-    ctrl(req, res, next);
-  }
-);
-
-// List files endpoint
-app.get('/api/files', async (req, res) => {
-  const { page = '0', size = '50' } = req.query;
-  
-  const result = await s3.directoryListPaginated('/uploads', {
-    pageNumber: parseInt(page as string),
-    pageSize: parseInt(size as string)
-  });
-  
-  res.json(result);
-});
-
-// Delete file endpoint
-app.delete('/api/files/:key(*)', async (req, res) => {
-  const key = decodeURIComponent(req.params.key);
-  await s3.deleteFile(key);
-  res.json({ success: true });
-});
-
-// Video streaming endpoint
-app.get('/api/video/:id',
-  async (req, res, next) => {
-    const videoPath = `/videos/${req.params.id}.mp4`;
-    const ctrl = await s3.getStreamVideoFileCtrl({
-      fileKey: videoPath,
-      contentType: 'video/mp4',
-      bufferMB: 5
-    });
-    ctrl(req, res, next);
-  }
-);
-
-app.listen(3000, () => {
-  console.log('Server running on port 3000');
-});
-```
-
-## 🚀 Performance Tips
-
-1. **Use Pagination**: For large directories, always use paginated methods
-2. **Stream Large Files**: Use streaming methods instead of loading entire files into memory
-3. **Connection Pooling**: The built-in connection pooling is optimized for concurrent requests
-4. **Batch Operations**: Use `Promise.all()` for parallel operations when possible
-5. **Presigned URLs**: Generate presigned URLs for direct client uploads/downloads when appropriate
-
-## 🛡️ Error Handling
-
-```typescript
-try {
-  await s3.uploadFile('/docs/file.pdf', buffer);
-} catch (error) {
-  if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-    console.error('File not found');
-  } else {
-    console.error('Upload failed:', error);
-  }
-}
-```
 
 ## 📝 TypeScript Support
 
-This package is written in TypeScript and includes full type definitions:
-
-```typescript
-import type { 
-  ContentFile, 
-  FileUploadResponse,
-  TreeDirectoryItem,
-  UploadedS3File,
-  S3UploadOptions 
-} from '@hdriel/aws-utils';
-```
+This package is written in TypeScript and includes full type definitions
 
 ## 👤 Author
 
