@@ -18,7 +18,7 @@ A powerful, type-safe wrapper around AWS S3 SDK v3 that simplifies S3 operations
 
 # FULL DEMO PROJECT EXAMPLE:
 please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
-![Main Screen - Preview](readme-assets/demo-bucket-image-preview.webp)
+![Main Screen - Preview](https://cdn.jsdelivr.net/gh/hdriel/aws-utils-demo/readme-assets/demo-bucket-image-preview.webp)
 
 
 ## Installation
@@ -106,7 +106,7 @@ interface S3UtilProps {
 
 # FULL DEMO PROJECT EXAMPLE:
 please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
-![Main Screen - Preview](readme-assets/login-screen.webp)
+![Login Screen - Preview](https://cdn.jsdelivr.net/gh/hdriel/aws-utils-demo/readme-assets/login-screen.webp)
 
 
 ---
@@ -528,7 +528,7 @@ The utility includes optimized HTTP/HTTPS agents:
 ## 📋 Complete Express.js Example
 # FULL DEMO PROJECT EXAMPLE:
 please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
-![Main Screen - Preview](readme-assets/demo-bucket-image-preview.webp)
+![Main Screen - Preview](https://cdn.jsdelivr.net/gh/hdriel/aws-utils-demo/readme-assets/demo-bucket-image-preview.webp)
 
 
 ## 📝 TypeScript Support
