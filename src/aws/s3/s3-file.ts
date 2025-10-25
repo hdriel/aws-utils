@@ -21,9 +21,9 @@ import {
     type PutObjectTaggingCommandOutput,
     type Tag,
 } from '@aws-sdk/client-s3';
-import { getNormalizedPath } from '../../utils/helpers';
+import { getNormalizedPath, getUnitBytes } from '../../utils/helpers';
 import { ACLs } from '../../utils/consts';
-import type { ContentFile, FileUploadResponse } from '../../interfaces';
+import type { BytesUnit, ContentFile, FileUploadResponse } from '../../interfaces';
 import { S3Directory, type S3DirectoryProps } from './s3-directory';
 
 export type S3FileProps = S3DirectoryProps;
@@ -34,9 +34,9 @@ export class S3File extends S3Directory {
     }
 
     async fileInfo(
-        filePath: string
+        fileKey: string
     ): Promise<HeadObjectCommandOutput & { Name: string; Location: string; Key: string }> {
-        const normalizedKey = getNormalizedPath(filePath);
+        const normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
@@ -87,7 +87,6 @@ export class S3File extends S3Directory {
         return files;
     }
 
-    // todo: checked!
     async fileListPaginated(
         directoryPath?: string,
         {
@@ -158,13 +157,12 @@ export class S3File extends S3Directory {
         };
     }
 
-    // todo: checked!
-    async taggingFile(filePath: string, tag: Tag | Tag[]): Promise<boolean> {
+    async taggingFile(fileKey: string, tag: Tag | Tag[]): Promise<boolean> {
         let normalizedKey: string = '';
         const tags = ([] as Tag[]).concat(tag);
 
         try {
-            normalizedKey = getNormalizedPath(filePath);
+            normalizedKey = getNormalizedPath(fileKey);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             const command = new PutObjectTaggingCommand({
@@ -182,9 +180,8 @@ export class S3File extends S3Directory {
         }
     }
 
-    // todo: checked!
-    async fileVersion(filePath: string): Promise<string> {
-        const normalizedKey = getNormalizedPath(filePath);
+    async fileVersion(fileKey: string): Promise<string> {
+        const normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new GetObjectTaggingCommand({ Bucket: this.bucket, Key: normalizedKey });
@@ -195,9 +192,8 @@ export class S3File extends S3Directory {
         return tag?.Value ?? '';
     }
 
-    // todo: checked!
-    async fileUrl(filePath: string, expiresIn: number | StringValue = '15m'): Promise<string> {
-        let normalizedKey = getNormalizedPath(filePath);
+    async fileUrl(fileKey: string, expiresIn: number | StringValue = '15m'): Promise<string> {
+        let normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
         const expiresInSeconds = typeof expiresIn === 'number' ? expiresIn : ms(expiresIn) / 1000;
 
@@ -206,42 +202,31 @@ export class S3File extends S3Directory {
             expiresIn: expiresInSeconds, // is using 3600 it's will expire in 1 hour (default is 900 seconds = 15 minutes)
         });
 
-        this.logger?.info(null, 'generate signed file url', { url, filePath: normalizedKey, expiresIn });
+        this.logger?.info(null, 'generate signed file url', { url, fileKey: normalizedKey, expiresIn });
         return url;
     }
 
-    async sizeOf(filePath: string, unit: 'bytes' | 'KB' | 'MB' | 'GB' = 'bytes'): Promise<number> {
-        const normalizedKey = getNormalizedPath(filePath);
+    async sizeOf(fileKey: string, unit: BytesUnit): Promise<number> {
+        const normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         try {
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
             const headObject = await this.execute<HeadObjectCommandOutput>(command);
             const bytes = headObject.ContentLength ?? 0;
-
-            switch (unit) {
-                case 'KB':
-                    return bytes / 1024;
-                case 'MB':
-                    return bytes / (1024 * 1024);
-                case 'GB':
-                    return bytes / (1024 * 1024 * 1024);
-                default:
-                    return bytes;
-            }
+            return getUnitBytes(bytes, unit);
         } catch (error: any) {
             if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-                this.logger?.warn(this.reqId, 'File not found', { filePath: normalizedKey });
+                this.logger?.warn(this.reqId, 'File not found', { fileKey: normalizedKey });
                 return 0;
             }
             throw error;
         }
     }
 
-    // todo: checked!
-    async fileExists(filePath: string): Promise<boolean> {
+    async fileExists(fileKey: string): Promise<boolean> {
         try {
-            const normalizedKey = getNormalizedPath(filePath);
+            const normalizedKey = getNormalizedPath(fileKey);
             if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
             const command = new HeadObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
@@ -257,9 +242,8 @@ export class S3File extends S3Directory {
         }
     }
 
-    // todo: checked!
-    async fileContent(filePath: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
-        let normalizedKey = getNormalizedPath(filePath);
+    async fileContent(fileKey: string, format: 'buffer' | 'base64' | 'utf8' = 'buffer'): Promise<Buffer | string> {
+        let normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new GetObjectCommand({ Bucket: this.bucket, Key: normalizedKey });
@@ -285,15 +269,35 @@ export class S3File extends S3Directory {
         return buffer;
     }
 
-    // todo: checked!
-    async uploadFile(
-        filePath: string,
-        fileData: Buffer | Readable | string | Uint8Array,
-        acl: ACLs = ACLs.private,
-        version: string = '1.0.0'
+    async uploadFileContent(
+        fileKey: string,
+        fileData: Buffer | Readable | string | Uint8Array | object,
+        {
+            acl = ACLs.private,
+            version = '1.0.0',
+            prettier = true,
+        }: {
+            acl?: ACLs;
+            version?: string;
+            prettier?: boolean;
+        } = {}
     ): Promise<FileUploadResponse> {
-        const normalizedKey = getNormalizedPath(filePath);
+        const normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+
+        let body: Buffer | Readable | Uint8Array | string;
+
+        if (Buffer.isBuffer(fileData)) {
+            body = fileData;
+        } else if (fileData instanceof Uint8Array) {
+            body = fileData;
+        } else if (fileData instanceof Readable) {
+            body = fileData;
+        } else if (typeof fileData === 'string') {
+            body = fileData;
+        } else {
+            body = prettier ? JSON.stringify(fileData, null, 2) : JSON.stringify(fileData);
+        }
 
         const upload = new Upload({
             client: this.s3Client,
@@ -301,7 +305,7 @@ export class S3File extends S3Directory {
                 Bucket: this.bucket,
                 ACL: acl,
                 Key: normalizedKey,
-                Body: fileData,
+                Body: body,
                 Tagging: `version=${version}`,
             },
         });
@@ -316,9 +320,8 @@ export class S3File extends S3Directory {
         };
     }
 
-    // todo: checked!
-    async deleteFile(filePath: string): Promise<DeleteObjectCommandOutput> {
-        const normalizedKey = getNormalizedPath(filePath);
+    async deleteFile(fileKey: string): Promise<DeleteObjectCommandOutput> {
+        const normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
         const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: normalizedKey });

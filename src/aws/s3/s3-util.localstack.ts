@@ -11,7 +11,6 @@ export class S3LocalstackUtil extends S3Util {
         super({ ...props, localstack: true });
     }
 
-    // todo: checked!
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
@@ -60,7 +59,6 @@ export class S3LocalstackUtil extends S3Util {
         return { directories, files };
     }
 
-    // todo: checked!
     async directoryListPaginated(
         directoryPath?: string,
         {

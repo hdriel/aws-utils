@@ -1,5 +1,5 @@
 import type { Response, Request, NextFunction, RequestHandler } from 'express';
-import path from 'pathe';
+import { basename, extname } from 'pathe';
 import { pipeline } from 'stream';
 import { promisify } from 'util';
 import { Buffer } from 'buffer';
@@ -19,7 +19,7 @@ import type {
     S3UploadOptions,
     UploadedS3File,
 } from '../../interfaces';
-import { getFileSize, getNormalizedPath, getTotalSeconds, parseRangeHeader } from '../../utils/helpers';
+import { getFileSize, getNormalizedPath, getTotalSeconds, getUnitBytes, parseRangeHeader } from '../../utils/helpers';
 import { S3File, type S3FileProps } from './s3-file';
 import type { StringValue } from 'ms';
 
@@ -71,7 +71,6 @@ export class S3Stream extends S3File {
         return response.Body as Readable;
     }
 
-    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
     protected async streamVideoFile(
         fileKey: string,
         {
@@ -119,7 +118,7 @@ export class S3Stream extends S3File {
                 },
             };
         } catch (error) {
-            this.logger?.warn(this.reqId, 'getS3VideoStream error', {
+            this.logger?.warn(this.reqId, 'streamVideoFile error', {
                 Bucket: this.bucket,
                 fileKey: normalizedKey,
                 Range,
@@ -129,36 +128,54 @@ export class S3Stream extends S3File {
         }
     }
 
-    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    async getStreamVideoFileCtrl({
-        fileKey,
+    async streamVideoFileCtrl({
         allowedWhitelist,
-        contentType = 'video/mp4',
-        streamTimeoutMS = 30_000,
         bufferMB = 5,
+        contentType,
+        fileKey: _fileKey,
+        queryField = 'file',
+        paramsField = 'file',
+        headerField = 'x-fileKey',
+        streamTimeoutMS = 30_000,
     }: {
-        contentType?: string;
-        fileKey: string;
         allowedWhitelist?: string[];
         bufferMB?: number | undefined;
+        contentType?: string;
+        fileKey?: string;
+        queryField?: string;
+        paramsField?: string;
+        headerField?: string;
         streamTimeoutMS?: number | undefined;
-    }) {
+    } = {}) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            let normalizedKey = getNormalizedPath(fileKey);
-            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+            let fileKey =
+                _fileKey ||
+                (req.params?.[paramsField] ? (req.params?.[paramsField] as string) : undefined) ||
+                (req.query?.[queryField] ? (req.query?.[queryField] as string) : undefined);
+            req.headers?.[headerField] ? (req.headers?.[headerField] as string) : undefined;
 
-            const isExists = await this.fileExists(normalizedKey);
-            const fileSize = await this.sizeOf(normalizedKey);
-            let Range;
-
-            if (!isExists) {
-                next(Error(`File does not exist: "${normalizedKey}"`));
+            if (!fileKey || fileKey === '/') {
+                this.logger?.warn(req.id, 'fileKey video stream is required');
+                next(Error('fileKey video stream is required'));
                 return;
             }
 
+            let normalizedKey = getNormalizedPath(fileKey);
+            if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
+            let Range: string;
+            let fileSize: number;
+
             try {
+                const fileInfo = await this.fileInfo(normalizedKey);
+                if (!fileInfo) {
+                    next(Error(`File does not exist: "${normalizedKey}"`));
+                    return;
+                }
+
+                fileSize = getUnitBytes(fileInfo.ContentLength as number);
+
                 if (req.method === 'HEAD') {
-                    res.setHeader('Content-Type', contentType);
+                    res.setHeader('Content-Type', fileInfo.ContentType);
                     res.setHeader('Accept-Ranges', 'bytes');
                     if (fileSize) res.setHeader('Content-Length', String(fileSize));
                     return res.status(200).end();
@@ -209,7 +226,10 @@ export class S3Stream extends S3File {
                     res.setHeader('Vary', 'Origin');
                 }
 
-                const finalContentType = contentType.startsWith('video/') ? contentType : `video/${contentType}`;
+                const finalContentType = contentType?.startsWith('video/')
+                    ? contentType
+                    : `video/${contentType || 'mp4'}`;
+
                 res.setHeader('Content-Type', meta.contentType ?? finalContentType);
                 res.setHeader('Accept-Ranges', meta.acceptRanges ?? 'bytes');
 
@@ -274,33 +294,35 @@ export class S3Stream extends S3File {
         };
     }
 
-    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    getImageFileViewCtrl = ({
+    streamImageFileCtrl = ({
         fileKey: _fileKey,
         queryField = 'file',
-        paramField = 'file',
+        paramsField = 'file',
+        headerField = 'x-fileKey',
         cachingAgeSeconds = '1y',
     }: {
         fileKey?: string;
         queryField?: string;
-        paramField?: string;
+        paramsField?: string;
+        headerField?: string;
         cachingAgeSeconds?: null | number | StringValue;
     } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             let fileKey =
                 _fileKey ||
-                (req.params?.[paramField] ? decodeURIComponent(req.params?.[paramField] as string) : undefined) ||
-                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
+                (req.params?.[paramsField] ? decodeURIComponent(req.params?.[paramsField] as string) : undefined) ||
+                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined) ||
+                (req.headers?.[headerField] ? decodeURIComponent(req.headers?.[headerField] as string) : undefined);
 
             if (!fileKey || fileKey === '/') {
                 this.logger?.warn(req.id, 'image fileKey is required');
-                next('image fileKey is required');
+                next(Error('image fileKey is required'));
                 return;
             }
 
             try {
                 const imageBuffer = await this.fileContent(fileKey, 'buffer');
-                const ext = path.extname(fileKey).slice(1).toLowerCase();
+                const ext = extname(fileKey).slice(1).toLowerCase();
 
                 const mimeTypeMap: Record<string, string> = {
                     jpg: 'image/jpeg',
@@ -329,39 +351,41 @@ export class S3Stream extends S3File {
                     fileKey,
                     ...(this.localstack && { localstack: this.localstack }),
                 });
-                next(`Failed to retrieve image file: ${error.message}`);
+                next(Error(`Failed to retrieve image file: ${error.message}`));
             }
         };
     };
 
-    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    getPdfFileViewCtrl = ({
+    streamPdfFileCtrl = ({
         fileKey: _fileKey,
         queryField = 'file',
-        paramField = 'file',
+        paramsField = 'file',
+        headerField = 'x-fileKey',
         cachingAgeSeconds = '1y',
     }: {
         fileKey?: string;
         queryField?: string;
-        paramField?: string;
+        paramsField?: string;
+        headerField?: string;
         cachingAgeSeconds?: null | number | StringValue;
     } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             let fileKey =
                 _fileKey ||
-                (req.params?.[paramField] ? decodeURIComponent(req.params?.[paramField] as string) : undefined) ||
-                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined);
+                (req.params?.[paramsField] ? decodeURIComponent(req.params?.[paramsField] as string) : undefined) ||
+                (req.query?.[queryField] ? decodeURIComponent(req.query?.[queryField] as string) : undefined) ||
+                (req.headers?.[headerField] ? decodeURIComponent(req.headers?.[headerField] as string) : undefined);
 
             if (!fileKey) {
                 this.logger?.warn(req.id, 'pdf fileKey is required');
-                next('pdf fileKey is required');
+                next(Error('pdf fileKey is required'));
                 return;
             }
 
             try {
                 // if (this.localstack && !fileKey.includes('/')) fileKey = `/${fileKey}`;
                 const fileBuffer = await this.fileContent(fileKey, 'buffer');
-                const ext = path.extname(fileKey).slice(1).toLowerCase();
+                const ext = extname(fileKey).slice(1).toLowerCase();
 
                 const mimeTypeMap: Record<string, string> = {
                     pdf: 'application/pdf',
@@ -376,8 +400,9 @@ export class S3Stream extends S3File {
 
                 const contentType = mimeTypeMap[ext] || 'application/octet-stream';
 
+                const filename = basename(fileKey);
                 res.setHeader('Content-Type', contentType);
-                res.setHeader('Content-Disposition', `inline; filename="${path.basename(fileKey)}"`);
+                res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
                 res.setHeader('Content-Length', fileBuffer.length);
 
                 const cachingAge =
@@ -393,23 +418,39 @@ export class S3Stream extends S3File {
                     fileKey,
                     ...(this.localstack && { localstack: this.localstack }),
                 });
-                next(`Failed to retrieve pdf file: ${error.message}`);
+                next(Error(`Failed to retrieve pdf file: ${error.message}`));
             }
         };
     };
 
-    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    async getStreamFileCtrl(
-        fileKey: string,
-        {
-            filename,
-            forDownloading = false,
-        }: {
-            filename?: string;
-            forDownloading?: boolean;
-        } = {}
-    ) {
+    async streamFileCtrl({
+        fileKey: _fileKey,
+        filename,
+        forDownloading = false,
+        paramsField = 'file',
+        queryField = 'file',
+        headerField = 'x-fileKey',
+    }: {
+        fileKey?: string;
+        filename?: string;
+        forDownloading?: boolean;
+        paramsField?: string;
+        queryField?: string;
+        headerField?: string;
+    } = {}) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
+            let fileKey =
+                _fileKey ||
+                (req.params?.[paramsField] ? (req.params?.[paramsField] as string) : undefined) ||
+                (req.query?.[queryField] ? (req.query?.[queryField] as string) : undefined) ||
+                (req.headers?.[headerField] ? decodeURIComponent(req.headers?.[headerField] as string) : undefined);
+
+            if (!fileKey || fileKey === '/') {
+                this.logger?.warn(req.id, 'fileKey stream is required');
+                next(Error('fileKey stream is required'));
+                return;
+            }
+
             const abort = new AbortController();
             let stream: Readable | null = null;
 
@@ -447,7 +488,7 @@ export class S3Stream extends S3File {
 
                 res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
                 if (forDownloading) {
-                    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+                    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
                 }
                 if (fileInfo.ContentLength) {
                     res.setHeader('Content-Length', String(fileInfo.ContentLength));
@@ -497,22 +538,38 @@ export class S3Stream extends S3File {
         };
     }
 
-    // todo: LOCALSTACK SANITY CHECKED - WORKING WELL, DON'T TOUCH!
-    async getStreamZipFileCtr(
-        fileKey: string | string[],
-        {
-            filename: _filename,
-            compressionLevel = 5,
-        }: {
-            filename?: string;
-            compressionLevel?: number; // Compression level (0-9, lower = faster)
-        } = {}
-    ) {
+    async streamZipFileCtr({
+        fileKey: _fileKey,
+        filename: _filename,
+        queryField = 'file',
+        paramsField = 'file',
+        headerField = 'x-fileKey',
+        compressionLevel = 5,
+    }: {
+        filename?: string;
+        compressionLevel?: number; // Compression level (0-9, lower = faster)
+        fileKey?: string | string[];
+        queryField?: string;
+        paramsField?: string;
+        headerField?: string;
+    } = {}) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             const abort = new AbortController();
             const onClose = () => abort.abort();
 
             try {
+                let fileKey =
+                    _fileKey ||
+                    (req.params?.[paramsField] ? (req.params?.[paramsField] as string) : undefined) ||
+                    (req.query?.[queryField] ? (req.query?.[queryField] as string) : undefined) ||
+                    (req.headers?.[headerField] ? decodeURIComponent(req.headers?.[headerField] as string) : undefined);
+
+                if (!fileKey || fileKey === '/') {
+                    this.logger?.warn(req.id, 'fileKey video stream is required');
+                    next(Error('fileKey video stream is required'));
+                    return;
+                }
+
                 const fileKeys = ([] as string[])
                     .concat(fileKey as string[])
                     .map((fileKey) => getNormalizedPath(fileKey))
@@ -607,7 +664,7 @@ export class S3Stream extends S3File {
                 const actualArchive = archiver('zip', { zlib: { level: compressionLevel } });
 
                 res.setHeader('Content-Type', 'application/zip');
-                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
                 res.setHeader('Content-Length', String(actualZipSize));
                 res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Content-Disposition, Content-Length');
 
@@ -665,15 +722,15 @@ export class S3Stream extends S3File {
         const fileTypesChecker = fileExt?.length ? new RegExp(`\\.(${fileExt.join('|')})$`, 'i') : undefined;
 
         return function (_req: Request, file: File, cb: multer.FileFilterCallback) {
-            const fileExtension = path.extname(file.originalname).substring(1); // Remove the dot
-            const extname = fileTypesChecker ? fileTypesChecker.test(`.${fileExtension}`) : true;
+            const fileExtension = extname(file.originalname).substring(1); // Remove the dot
+            const ext = fileTypesChecker ? fileTypesChecker.test(`.${fileExtension}`) : true;
             const mimeType = types?.length ? types.some((type) => file.mimetype.startsWith(`${type}/`)) : true;
 
-            if (mimeType && extname) {
+            if (mimeType && ext) {
                 return cb(null, true);
             }
 
-            const errorMsg = !extname
+            const errorMsg = !ext
                 ? `Upload File Ext Error: Allowed extensions: [${fileExt?.join(', ')}]. Got: ${fileExtension}`
                 : `Upload File Type Error: Allowed types: [${types?.join(', ')}]. Got: ${file.mimetype}`;
 
@@ -681,7 +738,7 @@ export class S3Stream extends S3File {
         };
     }
 
-    getUploadFileMW(
+    protected getUploadFileMW(
         directoryPath?: string,
         {
             acl = ACLs.private,
@@ -743,7 +800,7 @@ export class S3Stream extends S3File {
      * Middleware for uploading a single file
      * Adds the uploaded file info to req.s3File
      */
-    uploadSingleFile(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
+    uploadSingleFileMW(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';
@@ -779,7 +836,11 @@ export class S3Stream extends S3File {
      * Middleware for uploading multiple files with the same field name
      * Adds the uploaded files info to req.s3Files
      */
-    uploadMultipleFiles(fieldName: string, directoryPath: string, options: S3UploadOptions = {}) {
+    uploadMultipleFilesMW(
+        fieldName: string,
+        directoryPath: string,
+        { maxFilesCount, ...options }: S3UploadOptions & { maxFilesCount?: undefined | number | null } = {}
+    ) {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';
@@ -787,7 +848,7 @@ export class S3Stream extends S3File {
         const upload = this.getUploadFileMW(normalizedPath, options);
 
         return (req: Request & { s3Files?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
-            const mw: RequestHandler & any = upload.array(fieldName, options.maxFilesCount || undefined);
+            const mw: RequestHandler & any = upload.array(fieldName, maxFilesCount || undefined);
             mw(req, res, (err: any) => {
                 if (err) {
                     this.logger?.error(this.reqId, 'Multiple files upload error', { fieldName, error: err.message });
@@ -812,7 +873,7 @@ export class S3Stream extends S3File {
      * Middleware for uploading any files (mixed field names)
      * Adds the uploaded files info to req.s3AllFiles
      */
-    uploadAnyFiles(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
+    uploadAnyFilesMW(directoryPath: string, maxCount?: number, options: S3UploadOptions = {}): RequestHandler {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && normalizedPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         else normalizedPath = '';

@@ -205,16 +205,12 @@ await s3.deleteDirectory('/uploads/temp'); // Delete directory and all contents
 ```typescript
 // CREATE
 // > Upload File
-import { ACLs } from '@hdriel/aws-utils';
+import type { ACLs } from '@hdriel/aws-utils';
 
-// Upload buffer
-await s3.uploadFile('/documents/file.pdf', buffer);
-
-// Upload with public access
-await s3.uploadFile('/public/image.jpg', buffer, ACLs.public_read);
-
-// Upload with version tag
-await s3.uploadFile('/docs/v2.pdf', buffer, ACLs.private, '2.0.0');
+await s3.uploadFileContent('/documents/file.pdf', buffer); // Upload buffer
+await s3.uploadFileContent('/documents/file.pdf', [{ type: 'food', value: 'apple' }], { prettier: true /* default true */ }); // Upload object/array data
+await s3.uploadFileContent('/public/image.jpg', buffer, {acl: ACLs.public_read}); // Upload with public access
+await s3.uploadFileContent('/docs/v2.pdf', buffer, {acl: ACLs.private, version: '2.0.0'}); // Upload with version tag
 
 // >  Generate Presigned URL
 const url = await s3.fileUrl('/private/document.pdf'); // Expires in 15 minutes (default)
@@ -250,189 +246,347 @@ const gb = await s3.sizeOf('/large-file.zip', 'GB');
 // > File Tagging
 await s3.taggingFile('/documents/file.pdf', {Key: 'version', Value: '1.0.0'}); // Tag file with version
 
-
 // DELETE 
 await s3.deleteFile('/documents/old-file.pdf');
 
 ```
 
-### 🎬 Streaming & Express.js Integration
-
-#### Stream File Download
-```typescript
-import express from 'express';
-
-const app = express();
-
-// Stream single file
-app.get('/download/:file', 
-  await s3.getStreamFileCtrl({
-    filePath: '/documents/file.pdf',
-    filename: 'download.pdf',
-    forDownloading: true
-  })
-);
-```
-
-#### Stream Zip Archive
-```typescript
-// Download multiple files as zip
-app.get('/download-all',
-  await s3.getStreamZipFileCtr({
-    filePath: [
-      '/documents/file1.pdf',
-      '/documents/file2.pdf',
-      '/images/photo.jpg'
-    ],
-    filename: 'archive.zip',
-    compressionLevel: 5 // 0-9, lower = faster
-  })
-);
-```
-
-#### Stream Video with Range Support
-```typescript
-// Video streaming with range requests
-app.get('/video/:id',
-  await s3.getStreamVideoFileCtrl({
-    fileKey: '/videos/movie.mp4',
-    contentType: 'video/mp4',
-    bufferMB: 5,
-    streamTimeoutMS: 30000,
-    allowedWhitelist: ['https://myapp.com']
-  })
-);
-```
-
-#### View Image
-```typescript
-// Serve image with caching
-app.get('/image',
-  s3.getImageFileViewCtrl({
-    queryField: 'path', // ?path=/images/photo.jpg
-    cachingAge: 31536000 // 1 year
-  })
-);
-
-// With fixed file path
-app.get('/logo',
-  s3.getImageFileViewCtrl({
-    fileKey: '/public/logo.png'
-  })
-);
-```
-
-#### View PDF
-```typescript
-app.get('/pdf',
-  s3.getPdfFileViewCtrl({
-    queryField: 'document',
-    cachingAge: 86400 // 1 day
-  })
-);
-```
-
 ### 📤 File Upload Middleware
 
-#### Single File Upload
+#### Client Side
 ```typescript
-import express from 'express';
+class S3Service {
+    private api: Axios;
 
-const app = express();
-
-app.post('/upload',
-  s3.uploadSingleFile('file', '/uploads', {
-    maxFileSize: '5MB',
-    fileType: ['image', 'application'],
-    fileExt: ['jpg', 'png', 'pdf']
-  }),
-  (req, res) => {
-    console.log(req.s3File);
-    // {
-    //   key: '/uploads/photo.jpg',
-    //   location: 'https://...',
-    //   size: 12345,
-    //   mimetype: 'image/jpeg',
-    //   ...
-    // }
-    res.json({ file: req.s3File });
-  }
-);
-```
-
-#### Multiple Files Upload
-```typescript
-app.post('/upload-multiple',
-  s3.uploadMultipleFiles('photos', '/uploads/gallery', {
-    maxFileSize: '10MB',
-    maxFilesCount: 5,
-    fileType: ['image']
-  }),
-  (req, res) => {
-    console.log(req.s3Files); // Array of uploaded files
-    res.json({ files: req.s3Files });
-  }
-);
-```
-
-#### Upload with Custom Filename
-```typescript
-app.post('/upload',
-  s3.uploadSingleFile('file', '/uploads', {
-    filename: async (req, file) => {
-      const timestamp = Date.now();
-      const ext = path.extname(file.originalname);
-      return `${req.user.id}-${timestamp}${ext}`;
+    constructor() {
+        this.api = axios.create({
+            baseURL: this.baseURL,
+            timeout: 30_000,
+            headers: {'Content-Type': 'application/json'},
+            withCredentials: true,
+        });
     }
-  }),
-  (req, res) => {
-    res.json({ file: req.s3File });
-  }
-);
+
+
+    async uploadFile(
+        file: File,
+        directoryPath: string,
+        type?: FILE_TYPE,
+        onProgress?: (progress: number) => void
+    ): Promise<void> {
+        try {
+            if (!file) return;
+
+            if (this.uploadAbortController) {
+                this.uploadAbortController.abort();
+            }
+
+            this.uploadAbortController = new AbortController();
+
+            if (file.size === 0) {
+                const {data: response} = await this.api.post('/files/content', {
+                    path: directoryPath + file.name,
+                    data: '',
+                    signal: this.uploadAbortController.signal,
+                });
+                return response;
+            }
+
+            this.uploadAbortController.abort();
+            this.uploadAbortController = null;
+            this.uploadAbortController = new AbortController();
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Encode directory and filename to handle non-Latin characters
+            const encodedDirectory = encodeURIComponent(directoryPath);
+            const encodedFilename = encodeURIComponent(file.name);
+
+            const {data: response} = await this.api.post(`/files/upload/${type || ''}`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'X-Upload-Directory': encodedDirectory,
+                    'X-Upload-Filename': encodedFilename,
+                },
+                timeout: 1_000_000,
+                signal: this.uploadAbortController.signal,
+                onUploadProgress: onProgress
+                    ? (progressEvent: AxiosProgressEvent) => {
+                        const percentage = progressEvent.total
+                            ? (progressEvent.loaded / progressEvent.total) * 100
+                            : 0;
+                        onProgress(percentage);
+                    }
+                    : undefined,
+            });
+
+            this.uploadAbortController = null;
+            return response;
+        } catch (error) {
+            this.uploadAbortController = null;
+
+            console.error('Failed to upload file:', error);
+            throw error;
+        }
+    }
+
+    async uploadFiles(
+        files: File[],
+        directory: string,
+        type?: FILE_TYPE,
+        onProgress?: (progress: number) => void
+    ): Promise<void> {
+        try {
+            if (!files) return;
+
+            if (this.uploadAbortController) {
+                this.uploadAbortController.abort();
+            }
+
+            this.uploadAbortController = new AbortController();
+
+            await Promise.allSettled(
+                files
+                    .filter((file) => file.size === 0)
+                    .map(async (file) => {
+                        const { data: response } = await this.api.post('/files/content', {
+                            path: [directory.replace(/\/$/, ''), file.name].join('/'),
+                            data: '',
+                        });
+                        return response;
+                    })
+            );
+
+            files = files.filter((file) => file.size !== 0);
+
+            const formData = new FormData();
+            files.forEach((file) => {
+                const copyFile = new File([file], encodeURIComponent(file.name), { type: file.type });
+                formData.append('files', copyFile);
+            });
+
+            const encodedDirectory = encodeURIComponent(directory);
+
+            const { data: response } = await this.api.post(`/files/multi-upload/${type || ''}`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'X-Upload-Directory': encodedDirectory,
+                },
+                timeout: 1_000_000,
+                signal: this.uploadAbortController.signal,
+                onUploadProgress: onProgress
+                    ? (progressEvent: AxiosProgressEvent) => {
+                        const percentage = progressEvent.total
+                            ? (progressEvent.loaded / progressEvent.total) * 100
+                            : 0;
+                        onProgress(percentage);
+                    }
+                    : undefined,
+            });
+
+            this.uploadAbortController = null;
+
+            return response;
+        } catch (error) {
+            this.uploadAbortController = null;
+            console.error('Failed to upload file:', error);
+            throw error;
+        }
+    }
+    
+}
 ```
 
-#### Upload with Custom Metadata
+#### Server side (express.js)
+
 ```typescript
-app.post('/upload',
-  s3.uploadSingleFile('file', '/uploads', {
-    metadata: async (req, file) => ({
-      userId: req.user.id,
-      uploadDate: new Date().toISOString(),
-      originalName: file.originalname
-    })
-  }),
-  (req, res) => {
-    res.json({ file: req.s3File });
-  }
-);
-```
+# file.route.ts
+router.post(['/upload/:fileType', '/upload'], uploadSingleFileMW, uploadSingleFileCtrl);
+router.post(['/multi-upload/:fileType', '/multi-upload'], uploadMultiFilesMW, uploadMultiFilesCtrl);
 
-#### Upload Any Files (Mixed Fields)
-```typescript
-app.post('/upload-any',
-  s3.uploadAnyFiles('/uploads', 10, {
-    maxFileSize: '20MB'
-  }),
-  (req, res) => {
-    console.log(req.s3AllFiles); // All uploaded files
-    res.json({ files: req.s3AllFiles });
-  }
-);
-```
+###########################################################################################################
 
+# streamimg.mw.ts
+import { NextFunction, Request, Response } from 'express';
+import { FILE_TYPE, type S3Util, UploadedS3File } from '../shared';
+import logger from '../logger';
+
+export const uploadSingleFileMW = (req: Request & { s3File?: UploadedS3File }, res: Response, next: NextFunction) => {
+    try {
+        const fileType = req.params?.fileType as FILE_TYPE;
+
+        if (!req.headers.hasOwnProperty('x-upload-directory')) {
+            return res.status(400).json({ error: 'Directory header is required' });
+        }
+
+        const directory = (req.headers['x-upload-directory'] as string) || '';
+        const filename = req.headers['x-upload-filename'] as string;
+
+        logger.info(req.id, 'uploading single file', { filename, directory });
+
+        const s3UploadOptions: S3UploadOptions = {
+            ...(fileType && { fileType }),
+            ...(filename && { filename }),
+        } 
+        const uploadMiddleware = s3.uploadSingleFileMW('file', directory, s3UploadOptions);
+
+        return uploadMiddleware(req, res, next);
+    } catch (err: any) {
+        logger.error(req.id, 'failed on uploadMultiFilesCtrl', { errMsg: err.message });
+        next(err);
+    }
+};
+
+export const uploadMultiFilesMW = (
+    req: Request & { s3Files?: UploadedS3File[] },
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const fileType = req.params?.fileType as FILE_TYPE;
+        if (!req.headers.hasOwnProperty('x-upload-directory')) {
+            return res.status(400).json({ error: 'Directory header is required' });
+        }
+
+        const directory = (req.headers['x-upload-directory'] as string) || '/';
+        logger.info(req.id, 'uploading multiple files', { directory });
+
+        const s3UploadOptions: S3UploadOptions = {
+            ...(fileType && { fileType }),
+        }
+        const uploadMiddleware = s3.uploadMultipleFilesMW('files', directory, s3UploadOptions);
+
+        return uploadMiddleware(req, res, next);
+    } catch (err: any) {
+        logger.warn(req.id, 'failed to upload files', { message: err.message });
+        next(err);
+    }
+};
+
+###########################################################################################################
+
+# file.controller.ts
+export const uploadSingleFileCtrl = (
+    req: Request & { s3File?: UploadedS3File },
+    res: Response,
+    _next: NextFunction
+) => {
+    const s3File = req.s3File;
+
+    if (s3File) {
+        const file = {
+            key: s3File.key,
+            location: s3File.location,
+            bucket: s3File.bucket,
+            etag: s3File.etag,
+            // @ts-ignore
+            size: s3File.size,
+        };
+
+        // todo: store your fileKey in your database
+
+        logger.info(req.id, 'file uploaded', file);
+        return res.json({ success: true, file });
+    }
+
+    return res.status(400).json({ error: 'No file uploaded' });
+};
+
+export const uploadMultiFilesCtrl = (
+    req: Request & { s3Files?: UploadedS3File[] },
+    res: Response,
+    _next: NextFunction
+) => {
+    const s3Files = req.s3Files;
+
+    if (s3Files?.length) {
+        const files = s3Files.map((s3File) => ({
+            key: s3File.key,
+            location: s3File.location,
+            bucket: s3File.bucket,
+            etag: s3File.etag,
+        }));
+
+        // todo: store your fileKeys in your database
+
+        logger.info(req.id, 'files uploaded', files);
+        return res.json({ success: true, files });
+    }
+
+    return res.status(400).json({ error: 'No file uploaded' });
+};
+```
 ### Upload Options
 
 ```typescript
 interface S3UploadOptions {
-  acl?: 'private' | 'public-read' | 'public-read-write';
-  maxFileSize?: string | number;        // '5MB', '1GB', or bytes
-  maxFilesCount?: number;                // For multiple file uploads
-  filename?: string | ((req, file) => string | Promise<string>);
-  fileType?: Array<'image' | 'video' | 'audio' | 'application' | 'text'>;
-  fileExt?: string[];                    // ['jpg', 'png', 'pdf']
-  metadata?: object | ((req, file) => object | Promise<object>);
+    acl?: ACLs; // 'private' | 'public-read' | 'public-read-write';
+    maxFileSize?: ByteUnitStringValue | number; // '5MB', '1GB', or bytes
+    filename?: string | ((req: Request, file: File) => string | Promise<string>);
+    fileType?: FILE_TYPE | FILE_TYPE[]; // 'image' | 'video' | 'audio' | 'application' | 'text'
+    fileExt?: FILE_EXT | FILE_EXT[]; // 'jpg', 'png', 'pdf', etc... 
+    metadata?:
+        | Record<string, string>
+        | ((req: Request, file: File) => Record<string, string> | Promise<Record<string, string>>);
+
+    maxFilesCount?: undefined | number | null; // For multiple file uploads
 }
 ```
+
+### 🎬 Streaming Files
+
+#### Client side
+
+```html
+    <!-- videoURL = `${s3Service.baseURL}/files/stream?file=${encodedFileKey}` -->
+    <video controls src={videoURL}>
+        Your browser does not support the video tag.
+    </video>
+```
+
+#### Server side (Express.js)
+
+```typescript
+# file.route.ts
+router.get('/stream', streamVideoFilesCtrl);
+// or directly from s3 util like (need to provided file key from query.file or params.file or header field , or change it in the options like: {queryField: 'fileKey'} ) 
+router.get('/stream', s3.streamVideoFilesCtrl());
+
+# file.control.ts
+export const streamVideoFilesCtrl = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const fileKey = req.query?.file as string;
+        const mw = await s3.streamVideoFileCtrl({ fileKey });
+
+        return mw(req, res, next);
+    } catch (err: any) {
+        logger.error(req.id, 'failed on streamVideoFilesCtrl', { errMsg: err.message });
+        next(err);
+    }
+};
+```
+
+##### Streaming Image/PDF files
+```html
+    <!-- imageURL = `${s3Service.baseURL}/files/image?file=${encodedFileKey}` -->
+    <img src={imageURL} alt={file?.name} />
+
+    <!-- pdfURL = `${s3Service.baseURL}/files/pdf?file=${encodedFileKey}` -->
+    <iframe
+        src={pdfURL}
+        style={{ width: '100%', height: '600px', border: 'none' }}
+        title="PDF Preview"
+    />
+```
+
+Server Side
+```typescript
+router.get('/image', s3.streamImageFileCtrl());
+router.get('/pdf', s3.streamPdfFileCtrl());
+```
+
+
 
 ## 🧪 LocalStack Support
 
@@ -524,7 +678,6 @@ The utility includes optimized HTTP/HTTPS agents:
 // - socketTimeout: 30000ms
 ```
 
-
 ## 📋 Complete Express.js Example
 # FULL DEMO PROJECT EXAMPLE:
 please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
@@ -542,8 +695,9 @@ This package is written in TypeScript and includes full type definitions
 ## 🔗 Links
 
 - [AWS S3 Documentation](https://docs.aws.amazon.com/s3/)
+- [AWS S3 SDK V3 Documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/client/s3/)
 - [LocalStack Documentation](https://docs.localstack.cloud/user-guide/aws/s3/)
-- [GitHub Repository](#)
+- [GitHub Demo Repository](https://github.com/hdriel/aws-utils-demo)
 
 ---
 

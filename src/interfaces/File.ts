@@ -1,5 +1,7 @@
 import { type Unit as BytesUnit } from 'bytes';
 
+export { type Unit as BytesUnit } from 'bytes';
+
 export interface File {
     fieldname: string;
     originalname: string;

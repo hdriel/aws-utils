@@ -1,4 +1,4 @@
-import type { ByteUnitStringValue } from '../interfaces';
+import type { BytesUnit, ByteUnitStringValue } from '../interfaces';
 import bytes from 'bytes';
 import ms, { type StringValue } from 'ms';
 
@@ -34,4 +34,22 @@ export const getFileSize = (
 export const getTotalSeconds = (msValue: StringValue) => {
     const value = ms(msValue);
     return value / 1000;
+};
+
+export const getUnitBytes = (bytes: number, unit?: BytesUnit) => {
+    switch (unit?.toUpperCase()) {
+        case 'KB':
+            return bytes / 1024;
+        case 'MB':
+            return bytes / 1024 ** 2;
+        case 'GB':
+            return bytes / 1024 ** 3;
+        case 'TB':
+            return bytes / 1024 ** 4;
+        case 'PB':
+            return bytes / 1024 ** 5;
+        case 'B':
+        default:
+            return bytes;
+    }
 };

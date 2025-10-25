@@ -20,7 +20,6 @@ export class S3Directory extends S3Bucket {
         super(props);
     }
 
-    // todo: checked!
     async directoryExists(directoryPath: string): Promise<boolean> {
         try {
             const normalizedKey = getNormalizedPath(directoryPath);
@@ -39,7 +38,6 @@ export class S3Directory extends S3Bucket {
         }
     }
 
-    // todo: checked!
     async createDirectory(directoryPath: string): Promise<PutObjectCommandOutput> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (!normalizedPath || normalizedPath === '/') throw new Error('No directory path provided');
@@ -50,7 +48,6 @@ export class S3Directory extends S3Bucket {
         return result;
     }
 
-    // todo: checked!
     async deleteDirectory(directoryPath: string): Promise<DeleteObjectsCommandOutput | null> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (!normalizedPath) throw new Error('No directory path provided');
@@ -128,7 +125,6 @@ export class S3Directory extends S3Bucket {
         } as DeleteObjectsCommandOutput;
     }
 
-    // todo: checked!
     async directoryList(directoryPath?: string): Promise<{ directories: string[]; files: ContentFile[] }> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
@@ -199,7 +195,6 @@ export class S3Directory extends S3Bucket {
         return { directories, files };
     }
 
-    // todo: checked!
     async directoryListPaginated(
         directoryPath?: string,
         {

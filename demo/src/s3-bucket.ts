@@ -69,7 +69,7 @@ import { ACLs, S3LocalstackUtil } from '@hdriel/aws-utils';
         const directoryListInfo = await s3BucketUtil.directoryList('testing');
         console.log('Directory List Info', directoryListInfo);
 
-        const directoryPrefixFileListInfo = await s3BucketUtil.fileListInfo('testing/files', 'test');
+        const directoryPrefixFileListInfo = await s3BucketUtil.fileList('testing/files', 'test');
         console.log('Directory prefix file List Info', directoryPrefixFileListInfo);
 
         console.log('\n' + '='.repeat(25));
