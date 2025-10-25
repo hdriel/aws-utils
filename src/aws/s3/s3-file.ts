@@ -53,10 +53,7 @@ export class S3File extends S3Directory {
         };
     }
 
-    async fileListInfo(
-        directoryPath?: string,
-        fileNamePrefix?: string
-    ): Promise<(ContentFile & { Location: string })[]> {
+    async fileList(directoryPath?: string, fileNamePrefix?: string): Promise<(ContentFile & { Location: string })[]> {
         let normalizedPath = getNormalizedPath(directoryPath);
         if (normalizedPath !== '/' && directoryPath !== '' && directoryPath !== undefined) normalizedPath += '/';
         // Must filter by '/' to find files on root // THERE IS A DIFF BETWEEN LOCALSTACK TO AWS!! IN LOCALSTACK NEED THIS LINE, IN AWS it must by without this!
@@ -91,7 +88,7 @@ export class S3File extends S3Directory {
     }
 
     // todo: checked!
-    async fileListInfoPaginated(
+    async fileListPaginated(
         directoryPath?: string,
         {
             fileNamePrefix,
