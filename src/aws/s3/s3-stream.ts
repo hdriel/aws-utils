@@ -7,9 +7,9 @@ import archiver from 'archiver';
 import { Readable } from 'node:stream';
 import multerS3 from 'multer-s3';
 import multer, { type Multer } from 'multer';
+import pLimit, { type LimitFunction } from 'p-limit';
 import { GetObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { ACLs } from '../../utils/consts';
-import { s3Limiter } from '../../utils/concurrency';
 import type {
     ByteUnitStringValue,
     File,
@@ -25,14 +25,19 @@ import type { StringValue } from 'ms';
 
 const pump = promisify(pipeline);
 
-export type S3StreamProps = S3FileProps & { maxUploadFileSizeRestriction?: ByteUnitStringValue };
+export type S3StreamProps = S3FileProps & {
+    maxUploadFileSizeRestriction?: ByteUnitStringValue;
+    concurrencyVideoLimit?: number | null;
+};
 
 export class S3Stream extends S3File {
     private readonly maxUploadFileSizeRestriction: ByteUnitStringValue;
+    private readonly s3Limiter: LimitFunction | null;
 
-    constructor({ maxUploadFileSizeRestriction = '10GB', ...props }: S3StreamProps) {
+    constructor({ maxUploadFileSizeRestriction = '10GB', concurrencyVideoLimit = 0, ...props }: S3StreamProps) {
         super(props);
         this.maxUploadFileSizeRestriction = maxUploadFileSizeRestriction;
+        this.s3Limiter = concurrencyVideoLimit ? pLimit(concurrencyVideoLimit) : null;
     }
 
     protected async streamObjectFile(
@@ -101,7 +106,9 @@ export class S3Stream extends S3File {
                 ...(Range ? { Range } : {}),
             });
 
-            const data: GetObjectCommandOutput = await s3Limiter(() => this.execute(cmd, { abortSignal }));
+            const data: GetObjectCommandOutput = this.s3Limiter
+                ? await this.s3Limiter(() => this.execute(cmd, { abortSignal }))
+                : await this.execute(cmd, { abortSignal });
 
             const body = data.Body as Readable | undefined;
             if (!body) return null;
@@ -779,6 +786,7 @@ export class S3Stream extends S3File {
                 },
                 key: async (req: Request & any, file: File, cb: Function) => {
                     let filename: string;
+                    file.originalname = decodeURIComponent(file.originalname);
 
                     if (typeof _filename === 'function') {
                         filename = await _filename(req, file);

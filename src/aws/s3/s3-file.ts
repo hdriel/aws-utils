@@ -206,7 +206,7 @@ export class S3File extends S3Directory {
         return url;
     }
 
-    async sizeOf(fileKey: string, unit: BytesUnit): Promise<number> {
+    async sizeOf(fileKey: string, unit: BytesUnit = 'b'): Promise<number> {
         const normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
 
