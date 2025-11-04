@@ -19,7 +19,15 @@ import type {
     S3UploadOptions,
     UploadedS3File,
 } from '../../interfaces';
-import { getFileSize, getNormalizedPath, getTotalSeconds, getUnitBytes, parseRangeHeader } from '../../utils/helpers';
+import {
+    encodeS3Metadata,
+    getFileSize,
+    getNormalizedPath,
+    getTotalSeconds,
+    getUnitBytes,
+    hasNonAscii,
+    parseRangeHeader,
+} from '../../utils/helpers';
 import { S3File, type S3FileProps } from './s3-file';
 import type { StringValue } from 'ms';
 
@@ -811,12 +819,31 @@ export class S3Stream extends S3File {
                 bucket: this.bucket,
                 contentType: multerS3.AUTO_CONTENT_TYPE,
                 metadata: async (req: Request & any, file: File, cb: Function) => {
-                    const baseMetadata: FILES3_METADATA = { ...file, directory: normalizedPath };
+                    // Decode the original filename once
+                    const originalName = decodeURIComponent(file.originalname);
+
+                    const baseMetadata: FILES3_METADATA = {
+                        ...file,
+                        directory: normalizedPath,
+                        // Encode non-ASCII characters for S3 metadata
+                        originalname: encodeS3Metadata(originalName),
+                        // Optional: Add a flag to know it's encoded
+                        // @ts-ignore
+                        'originalname-encoded': hasNonAscii(originalName) ? 'base64' : 'plain',
+                    };
 
                     if (customMetadata) {
                         const additionalMetadata =
                             typeof customMetadata === 'function' ? await customMetadata(req, file) : customMetadata;
-                        Object.assign(baseMetadata, additionalMetadata);
+
+                        // Sanitize all custom metadata values
+                        const sanitizedMetadata: Record<string, string> = {};
+                        for (const [key, value] of Object.entries(additionalMetadata)) {
+                            sanitizedMetadata[key] =
+                                typeof value === 'string' ? encodeS3Metadata(value) : String(value);
+                        }
+
+                        Object.assign(baseMetadata, sanitizedMetadata);
                     }
 
                     cb(null, baseMetadata);

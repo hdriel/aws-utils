@@ -53,3 +53,18 @@ export const getUnitBytes = (bytes: number, unit?: BytesUnit) => {
             return bytes;
     }
 };
+
+// Helper to check if string contains non-ASCII characters
+export function hasNonAscii(str: string): boolean {
+    return /[^\x00-\x7F]/.test(str);
+}
+
+// Safe encode for S3 metadata (max 2KB per metadata value)
+export function encodeS3Metadata(value: string): string {
+    if (hasNonAscii(value)) {
+        // Base64 encode non-ASCII strings
+        return Buffer.from(value, 'utf8').toString('base64');
+    }
+    // Return ASCII strings as-is
+    return value;
+}
