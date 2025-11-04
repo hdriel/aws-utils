@@ -9,7 +9,7 @@ import multerS3 from 'multer-s3';
 import multer, { type Multer } from 'multer';
 import pLimit, { type LimitFunction } from 'p-limit';
 import { GetObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
-import { ACLs } from '../../utils/consts';
+import { ACLs, SUPPORTED_IFRAME_EXTENSIONS } from '../../utils/consts';
 import type {
     ByteUnitStringValue,
     File,
@@ -54,7 +54,6 @@ export class S3Stream extends S3File {
     ): Promise<Readable | null> {
         let normalizedKey = getNormalizedPath(fileKey);
         if (!normalizedKey || normalizedKey === '/') throw new Error('No file key provided');
-        // if (this.localstack && !normalizedKey.includes('/')) normalizedKey = `/${normalizedKey}`;
 
         if (checkFileExists) {
             const isExists = await this.fileExists(normalizedKey);
@@ -306,13 +305,13 @@ export class S3Stream extends S3File {
         queryField = 'file',
         paramsField = 'file',
         headerField = 'x-fileKey',
-        cachingAgeSeconds = '1y',
+        cachingAge: _cachingAge = '1y',
     }: {
         fileKey?: string;
         queryField?: string;
         paramsField?: string;
         headerField?: string;
-        cachingAgeSeconds?: null | number | StringValue;
+        cachingAge?: null | number | StringValue;
     } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             let fileKey =
@@ -346,11 +345,13 @@ export class S3Stream extends S3File {
                 res.setHeader('Content-Length', imageBuffer.length);
 
                 const cachingAge =
-                    !cachingAgeSeconds || typeof cachingAgeSeconds === 'number'
-                        ? cachingAgeSeconds
-                        : getTotalSeconds(cachingAgeSeconds as StringValue);
+                    !_cachingAge || typeof _cachingAge === 'number'
+                        ? _cachingAge
+                        : getTotalSeconds(_cachingAge as StringValue);
 
-                if (cachingAge) res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                if (cachingAge) {
+                    res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                }
 
                 res.status(200).send(imageBuffer);
             } catch (error: any) {
@@ -363,18 +364,20 @@ export class S3Stream extends S3File {
         };
     };
 
-    streamPdfFileCtrl = ({
+    streamBufferFileCtrl = ({
         fileKey: _fileKey,
+        filename: _filename,
         queryField = 'file',
         paramsField = 'file',
         headerField = 'x-fileKey',
-        cachingAgeSeconds = '1y',
+        cachingAge: _cachingAge = '1h',
     }: {
         fileKey?: string;
+        filename?: string;
         queryField?: string;
         paramsField?: string;
         headerField?: string;
-        cachingAgeSeconds?: null | number | StringValue;
+        cachingAge?: null | number | StringValue;
     } = {}) => {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
             let fileKey =
@@ -384,8 +387,8 @@ export class S3Stream extends S3File {
                 (req.headers?.[headerField] ? decodeURIComponent(req.headers?.[headerField] as string) : undefined);
 
             if (!fileKey) {
-                this.logger?.warn(req.id, 'pdf fileKey is required');
-                next(Error('pdf fileKey is required'));
+                this.logger?.warn(req.id, 'iframe fileKey is required');
+                next(Error('iframe fileKey is required'));
                 return;
             }
 
@@ -407,17 +410,19 @@ export class S3Stream extends S3File {
 
                 const contentType = mimeTypeMap[ext] || 'application/octet-stream';
 
-                const filename = basename(fileKey);
+                const filename = _filename || basename(fileKey);
                 res.setHeader('Content-Type', contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
-                res.setHeader('Content-Length', fileBuffer.length);
+                res.setHeader('Content-Length', String(fileBuffer.length));
 
                 const cachingAge =
-                    !cachingAgeSeconds || typeof cachingAgeSeconds === 'number'
-                        ? cachingAgeSeconds
-                        : getTotalSeconds(cachingAgeSeconds as StringValue);
+                    !_cachingAge || typeof _cachingAge === 'number'
+                        ? _cachingAge
+                        : getTotalSeconds(_cachingAge as StringValue);
 
-                res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                if (cachingAge) {
+                    res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
+                }
 
                 res.status(200).send(fileBuffer);
             } catch (error: any) {
@@ -437,6 +442,8 @@ export class S3Stream extends S3File {
         paramsField = 'file',
         queryField = 'file',
         headerField = 'x-fileKey',
+        streamMethod,
+        cachingAge: _cachingAge = '1h',
     }: {
         fileKey?: string;
         filename?: string;
@@ -444,9 +451,11 @@ export class S3Stream extends S3File {
         paramsField?: string;
         queryField?: string;
         headerField?: string;
+        cachingAge?: null | number | StringValue;
+        streamMethod?: 'pipe' | 'pipeline';
     } = {}) {
         return async (req: Request & any, res: Response & any, next: NextFunction & any) => {
-            let fileKey =
+            const fileKey =
                 _fileKey ||
                 (req.params?.[paramsField] ? (req.params?.[paramsField] as string) : undefined) ||
                 (req.query?.[queryField] ? (req.query?.[queryField] as string) : undefined) ||
@@ -492,13 +501,35 @@ export class S3Stream extends S3File {
 
                 const fileInfo = await this.fileInfo(normalizedKey);
                 const fileName = filename || normalizedKey.split('/').pop() || 'download';
+                const contentType = fileInfo.ContentType || 'application/octet-stream';
+                const ext = extname(fileKey).slice(1).toLowerCase();
 
-                res.setHeader('Content-Type', fileInfo.ContentType || 'application/octet-stream');
-                if (forDownloading) {
-                    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
-                }
+                // Determine if the file can be displayed inline (e.g., in iframe)
+                const inlineTypes = ['text/', 'image/', 'application/pdf', 'video/', 'audio/'];
+                const canDisplayInline =
+                    SUPPORTED_IFRAME_EXTENSIONS.includes(ext) ||
+                    inlineTypes.some((type) => contentType.startsWith(type));
+
+                res.setHeader('Content-Type', contentType);
                 if (fileInfo.ContentLength) {
                     res.setHeader('Content-Length', String(fileInfo.ContentLength));
+                }
+
+                if (forDownloading || !canDisplayInline) {
+                    // Force download
+                    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+                } else {
+                    // Display inline (e.g., in iframe) but still provide filename
+                    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
+                }
+
+                const cachingAge =
+                    !_cachingAge || typeof _cachingAge === 'number'
+                        ? _cachingAge
+                        : getTotalSeconds(_cachingAge as StringValue);
+
+                if (cachingAge) {
+                    res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
                 }
 
                 stream.on('error', (err) => {
@@ -512,7 +543,13 @@ export class S3Stream extends S3File {
                     req.off('close', onClose);
                 });
 
-                await pump(stream, res);
+                streamMethod ||= canDisplayInline ? 'pipe' : 'pipeline';
+
+                if (streamMethod === 'pipeline') {
+                    await pump(stream, res);
+                } else {
+                    stream.pipe(res);
+                }
 
                 req.off('close', onClose);
             } catch (error: any) {
@@ -919,6 +956,14 @@ export class S3Stream extends S3File {
      * Middleware for uploading multiple files with different field names
      * Adds the uploaded files info to req.s3FilesByField
      */
+    /*
+    example
+    uploadFieldsFiles([
+        { name: 'cardPosterSrc', maxCount: 1 },
+        { name: 'sectionPosterSrc', maxCount: 1 },
+        { name: 'imageSrc', maxCount: 1 },
+    ]) as any,
+    */
     // uploadFieldsFiles(
     //     fields: Array<{ name: string; directory: string; maxCount?: number; options?: S3UploadOptions }>
     // ): RequestHandler {
