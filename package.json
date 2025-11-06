@@ -1,6 +1,6 @@
 {
     "name": "@hdriel/aws-utils",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "description": "Simplified AWS SDK (v3) utilities for S3 (upload, download, streaming) with TypeScript support",
     "author": "Hadriel Benjo (https://github.com/hdriel)",
     "type": "module",

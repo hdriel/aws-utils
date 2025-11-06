@@ -48,7 +48,7 @@ export class S3Stream extends S3File {
         this.s3Limiter = concurrencyVideoLimit ? pLimit(concurrencyVideoLimit) : null;
     }
 
-    protected async streamObjectFile(
+    async getObjectFileStream(
         fileKey: string,
         {
             Range,
@@ -496,7 +496,7 @@ export class S3Stream extends S3File {
                     return;
                 }
 
-                stream = await this.streamObjectFile(normalizedKey, {
+                stream = await this.getObjectFileStream(normalizedKey, {
                     abortSignal: abort.signal,
                     checkFileExists: false,
                 });
@@ -508,9 +508,10 @@ export class S3Stream extends S3File {
                 }
 
                 const fileInfo = await this.fileInfo(normalizedKey);
-                const fileName = filename || normalizedKey.split('/').pop() || 'download';
+
                 const contentType = fileInfo.ContentType || 'application/octet-stream';
                 const ext = extname(fileKey).slice(1).toLowerCase();
+                const fileName = filename || normalizedKey.split('/').pop() || `${Date.now()}.${ext}`;
 
                 // Determine if the file can be displayed inline (e.g., in iframe)
                 const inlineTypes = ['text/', 'image/', 'application/pdf', 'video/', 'audio/'];
@@ -539,6 +540,8 @@ export class S3Stream extends S3File {
                 if (cachingAge) {
                     res.setHeader('Cache-Control', `public, max-age=${cachingAge}`);
                 }
+
+                res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Content-Disposition, Content-Length');
 
                 stream.on('error', (err) => {
                     this.logger?.warn(this.reqId, 'Stream error', { fileKey: normalizedKey, error: err });
@@ -642,7 +645,7 @@ export class S3Stream extends S3File {
                     try {
                         if (abort.signal.aborted) return null;
 
-                        const stream = await this.streamObjectFile(fileKey, { abortSignal: abort.signal });
+                        const stream = await this.getObjectFileStream(fileKey, { abortSignal: abort.signal });
 
                         if (!stream) {
                             this.logger?.warn(this.reqId, 'File not found', { fileKey });
