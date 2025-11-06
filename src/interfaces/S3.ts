@@ -1,5 +1,5 @@
-import type { ByteUnitStringValue, File, FILE_EXT, FILE_TYPE, FILES3_METADATA } from './File.ts';
-import { ACLs } from '../utils/consts.ts';
+import type { ByteUnitStringValue, File, FILE_EXT, FILE_TYPE, FILES3_METADATA } from './File';
+import { ACLs } from '../utils/consts';
 
 export interface ContentFile {
     Key: string;
