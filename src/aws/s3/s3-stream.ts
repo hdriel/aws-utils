@@ -502,7 +502,6 @@ export class S3Stream extends S3File {
                 }
 
                 const fileInfo = await this.fileInfo(normalizedKey);
-
                 const contentType = fileInfo.ContentType || 'application/octet-stream';
                 const ext = extname(fileKey).slice(1).toLowerCase();
                 const fileName = filename || normalizedKey.split('/').pop() || `${Date.now()}.${ext}`;
@@ -513,7 +512,20 @@ export class S3Stream extends S3File {
                     SUPPORTED_IFRAME_EXTENSIONS.includes(ext) ||
                     inlineTypes.some((type) => contentType.startsWith(type));
 
-                res.setHeader('Content-Type', contentType);
+                const shouldIncludeCharSet =
+                    contentType.startsWith('text/') ||
+                    contentType === 'application/json' ||
+                    contentType === 'application/xml' ||
+                    contentType === 'application/javascript' ||
+                    contentType === 'application/xhtml+xml';
+
+                if (shouldIncludeCharSet) {
+                    res.setHeader('Content-Type', `${contentType}; charset=utf-8`);
+                    stream.setEncoding('utf8');
+                } else {
+                    res.setHeader('Content-Type', contentType);
+                }
+
                 if (fileInfo.ContentLength) {
                     res.setHeader('Content-Length', String(fileInfo.ContentLength));
                 }
