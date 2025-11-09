@@ -53,7 +53,7 @@ export class LambdaEvents<T> extends LambdaBase {
         return this.directInvoke({ payload, invocationType: InvocationType.DryRun });
     }
 
-    async triggerLambdaEvent<T>(payload?: T): Promise<LambdaPayloadResponse> {
+    async triggerLambdaEvent(payload?: T): Promise<LambdaPayloadResponse> {
         return this.directInvoke({ payload, invocationType: InvocationType.Event });
     }
 

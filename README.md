@@ -1,3 +1,82 @@
+# AWS UTILS: S3, LAMBDA SNS, IAM
+
+## Quick Start
+
+First load this file somewhere on starting server
+```typescript 
+// aws-utils-config.ts
+import env from './dotenv.ts';
+import { AWSConfigSharingUtil } from '@hdriel/aws-utils';
+
+AWSConfigSharingUtil.setConfig({
+    accessKeyId: env?.AWS_ACCESS_KEY_ID,
+    secretAccessKey: env?.AWS_SECRET_ACCESS_KEY,
+    region: env?.AWS_REGION,
+    endpoint: env?.AWS_ENDPOINT,
+});
+
+// console.log('AWSConfigSharingUtil configuration');
+// console.table(AWSConfigSharingUtil.getConfig());
+
+```
+on your server files:
+```typescript
+import './aws-utils-config';
+...
+```
+
+then write your code...
+
+# Lambda Utility usage
+
+create your lambda by calling to LambdaUtil with generic type param and serviceFunctionName then usage any place your project
+
+```typescript
+export const lambdaUtilTelegram = new LambdaUtil<TELEGRAM_REQUEST_PARAMS>({
+    serviceFunctionName: 'serverless-telegram-dev-directInvokeSendTextNTF',
+    logger,
+});
+
+...
+
+
+await lambdaUtilTelegram
+    .triggerLambdaEvent({ 
+        chatId: userData.telegramId, 
+        body: `Just Like That! - Login code:\n${code}`
+    }).catch(console.error)
+
+```
+
+lambda functionality: 
+```typescript
+lambdaUtilInstance.runLambdaInDryRunMode(payload?: T): Promise<LambdaPayloadResponse>;
+lambdaUtilInstance.triggerLambdaEvent(payload?: T): Promise<LambdaPayloadResponse>;
+lambdaUtilInstance.runAndGetLambdaResponse(payload?: T): Promise<LambdaPayloadResponse>;
+```
+
+# SNS Utility usage
+
+create your SNS by calling to SnsUtil with generic type param and topicArn then usage any place your project
+
+```typescript
+export const snsUserCreatedTopic = new SnsUtil<REQUEST_PARAMS>({
+    topicArn: 'user-created',
+    logger,
+});
+
+...
+
+
+await snsUserCreatedTopic
+    .publishMessage({ 
+        userId: 'abc',
+        username: `Hadriel Benjo`
+    }).catch(console.error)
+
+```
+
+
 # S3 Utility Package
 
 A powerful, type-safe wrapper around AWS S3 SDK v3 that simplifies S3 operations with advanced features like streaming, file uploads, directory management, and LocalStack support.
@@ -27,31 +106,7 @@ please see this project code before using: [aws-utils-demo github link!](https:/
   npm install @hdriel/aws-utils
 ```
 
-## Quick Start
 
-First load this file somewhere on starting server
-```typescript 
-// aws-utils-config.ts
-import env from './dotenv.ts';
-import { AWSConfigSharingUtil } from '@hdriel/aws-utils';
-
-AWSConfigSharingUtil.setConfig({
-    accessKeyId: env?.AWS_ACCESS_KEY_ID,
-    secretAccessKey: env?.AWS_SECRET_ACCESS_KEY,
-    region: env?.AWS_REGION,
-    endpoint: env?.AWS_ENDPOINT,
-});
-
-// console.log('AWSConfigSharingUtil configuration');
-// console.table(AWSConfigSharingUtil.getConfig());
-```
-on your server files: 
-```typescript
-import './aws-utils-config';
-...
-```
-
-then write your code... 
 
 for example:
 
@@ -644,6 +699,13 @@ services:
   networks:
     - app-network
 ```
+
+# FULL LOCALSTACK DEMO:
+please see this project code before using: [aws-utils-demo github link!](https://github.com/hdriel/aws-utils-demo)
+
+Click the image to watch localstack video
+[![Watch the video](https://cdn.jsdelivr.net/gh/hdriel/aws-utils-demo/readme-assets/localstack-login.webp)](https://youtu.be/5DRV6ACq9jU)
+
 
 ## 🔧 Advanced Usage
 
