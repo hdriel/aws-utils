@@ -1,5 +1,6 @@
 import type { Response, Request, NextFunction, RequestHandler } from 'express';
 import { basename, extname } from 'pathe';
+import mime from 'mime-types';
 import { pipeline } from 'stream';
 import { promisify } from 'util';
 import { Buffer } from 'buffer';
@@ -502,6 +503,7 @@ export class S3Stream extends S3File {
                 }
 
                 const fileInfo = await this.fileInfo(normalizedKey);
+
                 const contentType = fileInfo.ContentType || 'application/octet-stream';
                 const ext = extname(fileKey).slice(1).toLowerCase();
                 const fileName = filename || normalizedKey.split('/').pop() || `${Date.now()}.${ext}`;
@@ -530,12 +532,12 @@ export class S3Stream extends S3File {
                     res.setHeader('Content-Length', String(fileInfo.ContentLength));
                 }
 
-                if (forDownloading || !canDisplayInline) {
-                    // Force download
-                    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
-                } else {
+                if (forDownloading === false || (forDownloading === undefined && canDisplayInline)) {
                     // Display inline (e.g., in iframe) but still provide filename
                     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
+                } else {
+                    // Force download
+                    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
                 }
 
                 const cachingAge =
@@ -826,7 +828,10 @@ export class S3Stream extends S3File {
                 acl,
                 s3: this.s3Client,
                 bucket: this.bucket,
-                contentType: multerS3.AUTO_CONTENT_TYPE,
+                contentType: function (_req: Request & any, file: File, cb: Function) {
+                    const contentType = file.mimetype || mime.lookup(file.originalname) || 'application/octet-stream';
+                    cb(null, contentType);
+                },
                 metadata: async (req: Request & any, file: File, cb: Function) => {
                     // Decode the original filename once
                     const originalName = decodeURIComponent(file.originalname);

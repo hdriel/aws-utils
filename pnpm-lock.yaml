@@ -47,6 +47,9 @@ importers:
       bytes:
         specifier: 3.1.2
         version: 3.1.2
+      mime-types:
+        specifier: ^3.0.1
+        version: 3.0.1
       ms:
         specifier: 2.1.3
         version: 2.1.3
@@ -81,6 +84,9 @@ importers:
       '@types/express':
         specifier: 5.0.3
         version: 5.0.3
+      '@types/mime-types':
+        specifier: ^3.0.1
+        version: 3.0.1
       '@types/ms':
         specifier: 2.1.0
         version: 2.1.0
@@ -975,6 +981,9 @@ packages:
 
   '@types/http-errors@2.0.5':
     resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
+
+  '@types/mime-types@3.0.1':
+    resolution: {integrity: sha512-xRMsfuQbnRq1Ef+C+RKaENOxXX87Ygl38W1vDfPHRku02TgQr+Qd8iivLtAMcR0KF5/29xlnFihkTlbqFrGOVQ==}
 
   '@types/mime@1.3.5':
     resolution: {integrity: sha512-/pyBZWSLD2n0dcHE3hq8s8ZvcETHtEuF+3E7XVt0Ig2nvsVQXdghHVcEkIWjy9A0wKfTn97a/PSDYohKIlnP/w==}
@@ -4171,6 +4180,8 @@ snapshots:
       '@types/serve-static': 1.15.8
 
   '@types/http-errors@2.0.5': {}
+
+  '@types/mime-types@3.0.1': {}
 
   '@types/mime@1.3.5': {}
 
