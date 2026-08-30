@@ -28,7 +28,8 @@
     },
     "scripts": {
         "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist",
-        "build:watch": "tsc --watch",
+        "build:watch": "tsup src/index.ts --format esm,cjs --dts --out-dir dist --watch",
+        "typecheck": "tsc --noEmit",
         "format": "prettier --write .",
         "clean": "rimraf ./dist",
         "yalc:publish": "pnpm run build && yalc publish --private --push && cd demo && pnpm add @hdriel/aws-utils && cd ../demo && npm run yalc:attach",

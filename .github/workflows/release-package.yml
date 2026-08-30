@@ -9,37 +9,33 @@ jobs:
         if: "!contains(github.event.head_commit.message, 'no-build')" # skip if 'no-build' is present
         runs-on: ubuntu-latest
         permissions:
-            packages: write
             contents: read
         steps:
-          - name: checkout
-            uses: actions/checkout@v3
+          - name: Checkout
+            uses: actions/checkout@v4
 
-          - name: Create temporary package.json
-            run: cp package.json temp-package.json
+          - name: Install pnpm
+            uses: pnpm/action-setup@v4
+            with:
+              version: 9
 
-          - name: Modify temporary package.json
-            run: |
-              jq 'del(.scripts.prepare)' temp-package.json > package.json
-
-          - name: setup node
-            uses: actions/setup-node@v3
+          - name: Setup Node
+            uses: actions/setup-node@v4
             with:
               node-version: 20
               registry-url: https://registry.npmjs.org/
               scope: '@hdriel'
+              cache: pnpm
 
-          - name: installing packages
-            run: | # Install npm packages
-              npm i -g pnpm
-              pnpm install --frozen-lockfile --prod --ignore-scripts
-              pnpm i cross-env
+          - name: Install dependencies
+            # full install (build needs devDeps: tsup / typescript / @types/node);
+            # --ignore-scripts skips native postinstall builds we don't need to bundle
+            run: pnpm install --frozen-lockfile --ignore-scripts
 
-          - name: building package
-            run: | # build lib output before publish
-              pnpm run build
+          - name: Build package
+            run: pnpm run build
 
-          - name: publish step
-            run: npm publish
+          - name: Publish
+            run: npm publish --access public
             env:
-                NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+              NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}

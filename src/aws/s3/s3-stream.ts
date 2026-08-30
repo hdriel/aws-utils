@@ -137,7 +137,7 @@ export class S3Stream extends S3File {
         }
     }
 
-    async streamVideoFileCtrl({
+    streamVideoFileCtrl({
         allowedWhitelist,
         bufferMB = 5,
         contentType,
@@ -438,7 +438,7 @@ export class S3Stream extends S3File {
         };
     };
 
-    async streamFileCtrl({
+    streamFileCtrl({
         fileKey: _fileKey,
         filename,
         forDownloading = false,
@@ -601,7 +601,7 @@ export class S3Stream extends S3File {
         };
     }
 
-    async streamZipFileCtr({
+    streamZipFileCtr({
         fileKey: _fileKey,
         filename: _filename,
         queryField = 'file',
@@ -739,7 +739,7 @@ export class S3Stream extends S3File {
                     }
                 });
 
-                actualArchive.pipe(res as WritableStream);
+                actualArchive.pipe(res);
 
                 // Re-add all files from buffers (instant - no S3 calls!)
                 for (const file of fileBuffers) {

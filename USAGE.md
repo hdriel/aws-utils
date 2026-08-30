@@ -62,8 +62,9 @@ AWSConfigSharingUtil.setConfig({
 AWSConfigSharingUtil.getConfig(); // { accessKeyId, secretAccessKey, region, endpoint }
 ```
 
-> ⚠️ `setConfig` replaces **all four** values on every call — always pass the
-> complete set, not a partial patch.
+`setConfig` merges only the keys you pass, so
+`AWSConfigSharingUtil.setConfig({ region: 'eu-west-1' })` updates the region and
+leaves the other values intact.
 
 ---
 
@@ -176,56 +177,50 @@ s3.client;    // the underlying @aws-sdk/client-s3 S3Client — use for anything
 
 ## 4. S3 Express middlewares (streaming & uploads)
 
-All of these are methods on `S3Util` that produce an Express handler
-`(req, res, next) => Promise<void>`. Unless you pass an explicit `fileKey`, the
-key is read from `req.params[paramsField]` → `req.query[queryField]` → header
-`headerField` (defaults: `paramsField='file'`, `queryField='file'`,
-`headerField='x-fileKey'`).
+All of these are methods on `S3Util`. Each is called as `method(opts)` and
+**returns an Express handler** `(req, res, next) => Promise<void>` — mount it
+directly, no `await`. Unless you pass an explicit `fileKey`, the key is read from
+`req.params[paramsField]` → `req.query[queryField]` → header `headerField`
+(defaults: `paramsField='file'`, `queryField='file'`, `headerField='x-fileKey'`).
 
-**Two shapes — mind the difference:**
-
-| method                                   | shape                        | how to mount                              |
-| ---------------------------------------- | ---------------------------- | ---------------------------------------- |
-| `streamFileCtrl(opts)`                   | `async` → `Promise<handler>` | `app.get('/x', await s3.streamFileCtrl(opts))` |
-| `streamVideoFileCtrl(opts)`              | `async` → `Promise<handler>` | `await` it                              |
-| `streamZipFileCtr(opts)` *(no `l`)*      | `async` → `Promise<handler>` | `await` it                              |
-| `streamImageFileCtrl(opts)`             | arrow prop → `handler`       | `app.get('/x', s3.streamImageFileCtrl(opts))` |
-| `streamBufferFileCtrl(opts)`            | arrow prop → `handler`       | use directly, no `await`                |
-
-The `async` factories don't actually await anything before returning the
-handler, so `await` resolves synchronously — but you must resolve the promise
-before passing it to the router.
+| method                              | purpose                                             |
+| ----------------------------------- | -------------------------------------------------- |
+| `streamFileCtrl(opts)`              | generic download / inline view, any content type   |
+| `streamVideoFileCtrl(opts)`         | video with HTTP `Range` support (206 partial)       |
+| `streamImageFileCtrl(opts)`         | image bytes with long cache                         |
+| `streamBufferFileCtrl(opts)`        | PDF / office docs, inline                           |
+| `streamZipFileCtr(opts)` *(no `l`)* | zip several keys on the fly                         |
 
 ```ts
 import express from 'express';
 const app = express();
 
-async function mountS3Routes() {
-  // Generic download / inline view (auto Content-Type + Content-Disposition)
-  app.get('/files/:file', await s3.streamFileCtrl({
-    forDownloading: false,      // false = inline (default), true = attachment
-    cachingAge: '1h',          // null | number(seconds) | ms-string
-    streamMethod: 'pipe',      // 'pipe' | 'pipeline' (auto-chosen if omitted)
-  }));
+// Generic download / inline view (auto Content-Type + Content-Disposition)
+app.get('/files/:file', s3.streamFileCtrl({
+  forDownloading: false,      // false = inline (default), true = attachment
+  cachingAge: '1h',          // null | number(seconds) | ms-string
+  streamMethod: 'pipe',      // 'pipe' | 'pipeline' (auto-chosen if omitted)
+}));
 
-  // Video with HTTP Range support (206 partial content)
-  app.get('/video/:file', await s3.streamVideoFileCtrl({
-    bufferMB: 5,
-    allowedWhitelist: ['https://app.example.com'], // optional CORS allow-list
-    streamTimeoutMS: 30_000,
-  }));
+// Video with HTTP Range support (206 partial content)
+app.get('/video/:file', s3.streamVideoFileCtrl({
+  bufferMB: 5,
+  allowedWhitelist: ['https://app.example.com'], // optional CORS allow-list
+  streamTimeoutMS: 30_000,
+}));
 
-  // Zip multiple keys on the fly (fileKey may be string | string[])
-  app.get('/download-zip', await s3.streamZipFileCtr({
-    fileKey: ['a/1.png', 'a/2.png'],
-    filename: 'photos.zip',
-    compressionLevel: 5,       // 0-9
-  }));
-}
-
-// Arrow-property handlers — pass directly, no await:
+// Image bytes with long cache
 app.get('/img/:file', s3.streamImageFileCtrl({ cachingAge: '1y' }));
+
+// PDF / office docs inline
 app.get('/doc/:file', s3.streamBufferFileCtrl({ cachingAge: '1h' }));
+
+// Zip multiple keys on the fly (fileKey may be string | string[])
+app.get('/download-zip', s3.streamZipFileCtr({
+  fileKey: ['a/1.png', 'a/2.png'],
+  filename: 'photos.zip',
+  compressionLevel: 5,       // 0-9
+}));
 ```
 
 ### Uploads (multer + multer-s3)
@@ -419,9 +414,9 @@ import type {
   if that matters to you.
 - **ESM package** — in CJS consumers use `require()` against the shipped CJS
   build or dynamic `import()`.
-- **Middleware factories vs arrow handlers:** `streamFileCtrl`,
-  `streamVideoFileCtrl`, `streamZipFileCtr` are `async` — `await fn(opts)` to get
-  the handler; `streamImageFileCtrl`, `streamBufferFileCtrl` return the handler
-  directly from `fn(opts)`.
+- **Stream middlewares:** every `stream*Ctrl` / `streamZipFileCtr` method returns
+  the Express handler synchronously — `app.get('/x', s3.streamFileCtrl(opts))`, no
+  `await`.
 - **`streamZipFileCtr`** is spelled without a trailing `l`.
-- **`AWSConfigSharingUtil.setConfig` overwrites all four fields every call.**
+- **`AWSConfigSharingUtil.setConfig` merges** — a partial call updates only the
+  keys you pass.

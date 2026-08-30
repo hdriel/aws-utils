@@ -17,10 +17,12 @@ export class AWSConfigSharingUtil {
         endpoint?: string | undefined;
         region?: string | undefined;
     }) {
-        AWSConfigSharingUtil.accessKeyId = accessKeyId as string;
-        AWSConfigSharingUtil.secretAccessKey = secretAccessKey as string;
-        AWSConfigSharingUtil.endpoint = endpoint as string;
-        AWSConfigSharingUtil.region = region as string;
+        // Merge only the keys that were actually provided so a partial call
+        // (e.g. setConfig({ region })) does not wipe the other values.
+        if (accessKeyId !== undefined) AWSConfigSharingUtil.accessKeyId = accessKeyId;
+        if (secretAccessKey !== undefined) AWSConfigSharingUtil.secretAccessKey = secretAccessKey;
+        if (endpoint !== undefined) AWSConfigSharingUtil.endpoint = endpoint;
+        if (region !== undefined) AWSConfigSharingUtil.region = region;
     }
 
     static getConfig() {

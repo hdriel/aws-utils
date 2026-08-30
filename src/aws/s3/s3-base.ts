@@ -13,6 +13,7 @@ export interface S3BaseProps {
     endpoint?: string;
     region?: string;
     s3ForcePathStyle?: boolean;
+    localstack?: boolean;
 }
 
 export class S3Base {
@@ -36,7 +37,6 @@ export class S3Base {
         endpoint = AWSConfigSharingUtil.endpoint,
         region = AWSConfigSharingUtil.region,
         s3ForcePathStyle = true,
-        // @ts-ignore
         localstack = false,
     }: S3BaseProps) {
         const credentials = { accessKeyId, secretAccessKey };

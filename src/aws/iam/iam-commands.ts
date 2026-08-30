@@ -15,7 +15,7 @@ export class IamCommands extends IamBase {
 
             return response.Users;
         } catch (error) {
-            console.error('Error IAM users list:', error);
+            this.logger?.error(this.reqId, 'Error IAM users list', { error });
             return null;
         }
     }
