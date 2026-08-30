@@ -160,8 +160,8 @@ export class S3Stream extends S3File {
             let fileKey =
                 _fileKey ||
                 (req.params?.[paramsField] ? (req.params?.[paramsField] as string) : undefined) ||
-                (req.query?.[queryField] ? (req.query?.[queryField] as string) : undefined);
-            req.headers?.[headerField] ? (req.headers?.[headerField] as string) : undefined;
+                (req.query?.[queryField] ? (req.query?.[queryField] as string) : undefined) ||
+                (req.headers?.[headerField] ? (req.headers?.[headerField] as string) : undefined);
 
             if (!fileKey || fileKey === '/') {
                 this.logger?.warn(req.id, 'fileKey video stream is required');
@@ -739,7 +739,7 @@ export class S3Stream extends S3File {
                     }
                 });
 
-                actualArchive.pipe(res as NodeJS.WritableStream);
+                actualArchive.pipe(res as WritableStream);
 
                 // Re-add all files from buffers (instant - no S3 calls!)
                 for (const file of fileBuffers) {
@@ -967,7 +967,7 @@ export class S3Stream extends S3File {
         const upload = this.getUploadFileMW(normalizedPath, options);
 
         return (req: Request & { s3AllFiles?: UploadedS3File[] } & any, res: Response, next: NextFunction & any) => {
-            const anyUpload: RequestHandler & any = maxCount ? upload.any() : upload.any();
+            const anyUpload: RequestHandler & any = upload.any();
 
             anyUpload(req, res, (err: any) => {
                 if (err) {

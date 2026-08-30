@@ -36,21 +36,21 @@ export const getTotalSeconds = (msValue: StringValue) => {
     return value / 1000;
 };
 
-export const getUnitBytes = (bytes: number, unit?: BytesUnit) => {
+export const getUnitBytes = (bytesVal: number, unit?: BytesUnit) => {
     switch (unit?.toUpperCase()) {
         case 'KB':
-            return bytes / 1024;
+            return bytesVal / 1024;
         case 'MB':
-            return bytes / 1024 ** 2;
+            return bytesVal / 1024 ** 2;
         case 'GB':
-            return bytes / 1024 ** 3;
+            return bytesVal / 1024 ** 3;
         case 'TB':
-            return bytes / 1024 ** 4;
+            return bytesVal / 1024 ** 4;
         case 'PB':
-            return bytes / 1024 ** 5;
+            return bytesVal / 1024 ** 5;
         case 'B':
         default:
-            return bytes;
+            return bytesVal;
     }
 };
 

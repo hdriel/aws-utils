@@ -30,3 +30,6 @@ demo/.yalc
 demo-app/yalc.lock
 demo-server/yalc.lock
 demo/yalc.lock
+
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md

@@ -29,7 +29,9 @@ then write your code...
 
 # Lambda Utility usage
 
-create your lambda by calling to LambdaUtil with generic type param and serviceFunctionName then usage any place your project
+Create your lambda helper by calling `LambdaUtil` with two generic type params -
+`TPayload` (the request payload) and `TResult` (the already `JSON.parse`d value the
+lambda returns) - plus a `serviceFunctionName`, then use it anywhere in your project.
 
 ```typescript
 export const lambdaUtilTelegram = new LambdaUtil<TELEGRAM_REQUEST_PARAMS>({
@@ -37,22 +39,44 @@ export const lambdaUtilTelegram = new LambdaUtil<TELEGRAM_REQUEST_PARAMS>({
     logger,
 });
 
-...
-
-
+// fire-and-forget (async invocation)
 await lambdaUtilTelegram
-    .triggerLambdaEvent({ 
-        chatId: userData.telegramId, 
-        body: `Just Like That! - Login code:\n${code}`
-    }).catch(console.error)
-
+    .triggerLambdaEvent({
+        chatId: userData.telegramId,
+        body: `Just Like That! - Login code:\n${code}`,
+    })
+    .catch(console.error);
 ```
 
-lambda functionality: 
+`runAndGetLambdaResponse` invokes the lambda synchronously and returns the payload
+already decoded from the response buffer and `JSON.parse`d - typed as `TResult`
+(no manual `Buffer.from(...).toString()` / `JSON.parse` needed). It throws on a
+non-2xx `StatusCode` or when the lambda itself threw (`FunctionError`).
+
 ```typescript
-lambdaUtilInstance.runLambdaInDryRunMode(payload?: T): Promise<LambdaPayloadResponse>;
-lambdaUtilInstance.triggerLambdaEvent(payload?: T): Promise<LambdaPayloadResponse>;
-lambdaUtilInstance.runAndGetLambdaResponse(payload?: T): Promise<LambdaPayloadResponse>;
+export const lambdaUtilVibeReport = new LambdaUtil<VIBE_REPORT_SLS_REQUEST_PARAMS, { reportKey: string }>({
+    serviceFunctionName: 'serverless-vibe-report-dev-directInvokeGenerateReport',
+});
+
+const { reportKey } = await lambdaUtilVibeReport.runAndGetLambdaResponse(data);
+```
+
+If your lambda returns an API-Gateway-style proxy response (`{ statusCode, body }`
+where `body` is itself a JSON string), use `runAndGetProxyResponse` - it unwraps and
+parses `body` for you and throws on a non-2xx `statusCode`:
+
+```typescript
+const result = await lambdaUtilVibeReport.runAndGetProxyResponse<{ reportKey: string }>(data);
+```
+
+You can also override the result type per call: `runAndGetLambdaResponse<OtherType>(payload)`.
+
+lambda functionality:
+```typescript
+lambdaUtilInstance.runLambdaInDryRunMode(payload?: TPayload): Promise<InvokeCommandOutput>;
+lambdaUtilInstance.triggerLambdaEvent(payload?: TPayload): Promise<InvokeCommandOutput>;
+lambdaUtilInstance.runAndGetLambdaResponse<R = TResult>(payload?: TPayload): Promise<R>;
+lambdaUtilInstance.runAndGetProxyResponse<R = TResult>(payload?: TPayload): Promise<R>;
 ```
 
 # SNS Utility usage

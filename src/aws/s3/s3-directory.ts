@@ -141,7 +141,8 @@ export class S3Directory extends S3Bucket {
                         Delimiter: '/',
                     })
                 ),
-                await this.execute<ListObjectsV2CommandOutput>(
+                // added await
+                this.execute<ListObjectsV2CommandOutput>(
                     new ListObjectsV2Command({
                         Bucket: this.bucket,
                         Prefix: '',

@@ -1,0 +1,4 @@
+allowBuilds:
+  aws-crt: false
+  aws-sdk: false
+  esbuild: false
