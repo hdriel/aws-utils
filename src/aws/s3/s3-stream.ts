@@ -4,7 +4,7 @@ import mime from 'mime-types';
 import { pipeline } from 'stream';
 import { promisify } from 'util';
 import { Buffer } from 'buffer';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { Readable } from 'node:stream';
 import multerS3 from 'multer-s3';
 import multer, { type Multer } from 'multer';
@@ -700,7 +700,7 @@ export class S3Stream extends S3File {
                     totalSizeMB: (fileBuffers.reduce((sum, f) => sum + f!.buffer.length, 0) / (1024 * 1024)).toFixed(2),
                 });
 
-                const measureArchive = archiver('zip', { zlib: { level: compressionLevel } });
+                const measureArchive = new ZipArchive({ zlib: { level: compressionLevel } });
                 let actualZipSize = 0;
 
                 measureArchive.on('data', (chunk: Buffer) => {
@@ -724,7 +724,7 @@ export class S3Stream extends S3File {
                     sizeMB: (actualZipSize / (1024 * 1024)).toFixed(2),
                 });
 
-                const actualArchive = archiver('zip', { zlib: { level: compressionLevel } });
+                const actualArchive = new ZipArchive({ zlib: { level: compressionLevel } });
 
                 res.setHeader('Content-Type', 'application/zip');
                 res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);

@@ -3,11 +3,12 @@
         "useDefineForClassFields": true,
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "skipLibCheck": true,
+        "types": ["node"],
         "target": "es6",
         "module": "ES2022",
 
         /* Bundler mode */
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,
         "moduleDetection": "force",

@@ -2,3 +2,6 @@ allowBuilds:
   aws-crt: false
   aws-sdk: false
   esbuild: false
+overrides:
+  lodash: ^4.18.0
+  minimatch@>=7 <11.0.1: ^11.0.1
